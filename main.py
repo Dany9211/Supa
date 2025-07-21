@@ -22,7 +22,7 @@ def run_query(query):
 
 if st.button("Calcola ROI"):
     try:
-        query = "SELECT * FROM matches"
+        query = "SELECT * FROM Matches"
         filters = []
         if home_filter:
             filters.append(f"squadra_home = '{home_filter}'")
