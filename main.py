@@ -20,33 +20,40 @@ def run_query(query):
 
 # Carica dataset
 df = run_query('SELECT * FROM "Matches";')
-st.write(f"**Righe totali:** {len(df)}")
+st.write(f"**Righe totali nel dataset:** {len(df)}")
 
 filters = {}
 
-# Colonne gol da filtrare con menu a tendina
+# Colonne gol con menu a tendina
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    if col.lower() == "id":  # Ignora ID
+    if col.lower() == "id" or "minutaggio" in col.lower():  # Escludi ID e minutaggio
         continue
 
     if col in gol_columns_dropdown:
         unique_vals = sorted(df[col].dropna().unique().tolist())
+        if 0 not in unique_vals:
+            unique_vals = [0] + unique_vals
         selected_val = st.selectbox(f"Filtra per {col}", ["Tutti"] + [str(v) for v in unique_vals])
         if selected_val != "Tutti":
-            filters[col] = selected_val
+            filters[col] = int(selected_val)
     else:
-        # Controlla se la colonna contiene numeri
+        # Controlla se numerico
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
-            min_val = float(col_temp.min(skipna=True))
-            max_val = float(col_temp.max(skipna=True))
+            # Se la colonna riguarda gol (es. primo_gol_home) forziamo minimo 0
+            if "gol" in col.lower():
+                min_val = 0
+                max_val = float(col_temp.max(skipna=True))
+            else:
+                min_val = float(col_temp.min(skipna=True))
+                max_val = float(col_temp.max(skipna=True))
             selected_range = st.slider(
                 f"Filtro per {col}",
                 min_val, max_val,
                 (min_val, max_val),
-                step=0.01
+                step=1.0 if "gol" in col.lower() else 0.01
             )
             filters[col] = (selected_range, col_temp)
         else:
@@ -67,7 +74,7 @@ for col, val in filters.items():
         mask = (col_temp >= range_vals[0]) & (col_temp <= range_vals[1])
         filtered_df = filtered_df[mask.fillna(True)]
     else:
-        filtered_df = filtered_df[filtered_df[col].astype(str) == val]
+        filtered_df = filtered_df[filtered_df[col].astype(str) == str(val)]
 
 st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
