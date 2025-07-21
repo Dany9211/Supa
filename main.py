@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (filtri ottimizzati)")
+st.title("Filtro Completo Matches + Winrate 1X2")
 
 # Funzione di connessione
 def run_query(query):
@@ -23,13 +23,23 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
+# Aggiungi colonna esito (1, X, 2)
+def determina_esito(row):
+    if row["gol_home_ft"] > row["gol_away_ft"]:
+        return "1"
+    elif row["gol_home_ft"] < row["gol_away_ft"]:
+        return "2"
+    else:
+        return "X"
+
+df["esito"] = df.apply(determina_esito, axis=1)
+
 filters = {}
 
 # Colonne gol con menu a tendina
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    # Escludiamo colonne indesiderate
     if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
@@ -41,7 +51,6 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
-        # Se numerica, slider
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
             min_val = col_temp.min(skipna=True)
@@ -78,3 +87,15 @@ for col, val in filters.items():
 st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
+
+# Calcolo Winrate 1X2
+if len(filtered_df) > 0:
+    risultati = filtered_df["esito"].value_counts()
+    totale_partite = len(filtered_df)
+
+    st.subheader("Winrate 1X2")
+    for esito in ["1", "X", "2"]:
+        winrate = (risultati.get(esito, 0) / totale_partite) * 100
+        st.write(f"**Esito {esito}: {risultati.get(esito, 0)} partite ({winrate:.2f}%)**")
+else:
+    st.warning("Nessuna partita trovata con i filtri selezionati.")
