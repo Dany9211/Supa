@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches")
+st.title("Filtro Completo Matches (senza filtri gol sequenziali)")
 
 # Connessione DB
 def run_query(query):
@@ -25,11 +25,12 @@ st.write(f"**Righe totali nel dataset:** {len(df)}")
 
 filters = {}
 
+# Colonne gol con menu a tendina
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    if col.lower() == "id" or "minutaggio" in col.lower():
-        continue
+    if col.lower() == "id" or "primo" in col.lower() or "secondo" in col.lower() or "terzo" in col.lower():
+        continue  # Rimuoviamo filtri per gol sequenziali
 
     if col in gol_columns_dropdown:
         unique_vals = sorted(df[col].dropna().unique().tolist())
@@ -39,19 +40,13 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
-        # Converti numeri
+        # Gestione numeri
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
             min_val = col_temp.min(skipna=True)
             max_val = col_temp.max(skipna=True)
             if pd.notna(min_val) and pd.notna(max_val):
-                # Forza range per colonne gol (primo_gol, secondo_gol, ecc.)
-                if "gol" in col.lower():
-                    min_val = 0
-                    step_val = 1.0
-                else:
-                    step_val = 0.01
-
+                step_val = 0.01
                 selected_range = st.slider(
                     f"Filtro per {col}",
                     float(min_val), float(max_val),
