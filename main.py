@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (filtri ottimizzati) + Risultato FT")
+st.title("Filtro Completo Matches (filtri ottimizzati) + Risultato FT + WinRate")
 
 # Funzione di connessione
 def run_query(query):
@@ -32,12 +32,10 @@ if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
     )
 
 filters = {}
-
-# Colonne gol con menu a tendina
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
+# Filtri
 for col in df.columns:
-    # Escludiamo colonne indesiderate
     if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
        any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
@@ -50,7 +48,6 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
-        # Se numerica, slider
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
             min_val = col_temp.min(skipna=True)
@@ -74,7 +71,6 @@ for col in df.columns:
                 if selected_val != "Tutti":
                     filters[col] = selected_val
 
-# Applica i filtri
 filtered_df = df.copy()
 for col, val in filters.items():
     if isinstance(val, tuple):
@@ -96,7 +92,7 @@ risultati_interessanti = [
     "3-0", "3-1", "3-2", "3-3"
 ]
 
-# Aggiungiamo categorie "Altro risultato casa vince", "Altro risultato ospite vince", "Altro pareggio"
+# Classificazione
 def classifica_risultato(ris):
     home, away = map(int, ris.split("-"))
     if ris in risultati_interessanti:
@@ -116,3 +112,20 @@ if not filtered_df.empty:
     distribuzione.columns = ["Risultato FT", "Conteggio"]
     distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
     st.table(distribuzione)
+
+    # Calcolo WinRate 1-X-2
+    st.subheader("WinRate Esiti Finali (da griglia)")
+    count_1 = distribuzione[distribuzione["Risultato FT"].str.contains("casa vince")].Conteggio.sum() + \
+              distribuzione[distribuzione["Risultato FT"].isin(["1-0","2-0","2-1","3-0","3-1","3-2"])].Conteggio.sum()
+    count_2 = distribuzione[distribuzione["Risultato FT"].str.contains("ospite vince")].Conteggio.sum() + \
+              distribuzione[distribuzione["Risultato FT"].isin(["0-1","0-2","0-3","1-2","1-3","2-3"])].Conteggio.sum()
+    count_x = distribuzione[distribuzione["Risultato FT"].str.contains("pareggio")].Conteggio.sum() + \
+              distribuzione[distribuzione["Risultato FT"].isin(["0-0","1-1","2-2","3-3"])].Conteggio.sum()
+
+    totale = len(filtered_df)
+    winrate_df = pd.DataFrame({
+        "Esito": ["1 (Casa)", "X (Pareggio)", "2 (Trasferta)"],
+        "Conteggio": [count_1, count_x, count_2],
+        "WinRate %": [round((count_1/totale)*100,2), round((count_x/totale)*100,2), round((count_2/totale)*100,2)]
+    })
+    st.table(winrate_df)
