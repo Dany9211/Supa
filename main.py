@@ -23,7 +23,7 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
-# Creiamo la nuova colonna "risultato_ft" dopo la colonna "away_team"
+# Creiamo la colonna "risultato_ft"
 if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
     df.insert(
         loc=df.columns.get_loc("away_team") + 1,
@@ -88,12 +88,31 @@ st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
 
-# Distribuzione risultati esatti
-if not filtered_df.empty and "risultato_ft" in filtered_df.columns:
+# Lista dei risultati che vogliamo mostrare
+risultati_interessanti = [
+    "0-0", "0-1", "0-2", "0-3",
+    "1-0", "1-1", "1-2", "1-3",
+    "2-0", "2-1", "2-2", "2-3",
+    "3-0", "3-1", "3-2", "3-3"
+]
+
+# Aggiungiamo categorie "Altro risultato casa vince", "Altro risultato ospite vince", "Altro pareggio"
+def classifica_risultato(ris):
+    home, away = map(int, ris.split("-"))
+    if ris in risultati_interessanti:
+        return ris
+    if home > away:
+        return "Altro risultato casa vince"
+    elif home < away:
+        return "Altro risultato ospite vince"
+    else:
+        return "Altro pareggio"
+
+if not filtered_df.empty:
+    filtered_df["risultato_classificato"] = filtered_df["risultato_ft"].apply(classifica_risultato)
+
     st.subheader("Distribuzione Risultati Esatti (FT)")
-    distribuzione = filtered_df["risultato_ft"].value_counts().reset_index()
+    distribuzione = filtered_df["risultato_classificato"].value_counts().reset_index()
     distribuzione.columns = ["Risultato FT", "Conteggio"]
     distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
     st.table(distribuzione)
-else:
-    st.warning("Nessun dato disponibile per calcolare la distribuzione dei risultati esatti.")
