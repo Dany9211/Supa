@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (filtri ottimizzati) + Risultati FT e HT")
+st.title("Filtro Completo Matches (FT, HT & Analisi Rimonta)")
 
 # Funzione di connessione
 def run_query(query):
@@ -23,7 +23,7 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
-# --- Aggiungi colonna risultato_ft ---
+# --- Colonna risultato_ft ---
 if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
     df.insert(
         loc=df.columns.get_loc("away_team") + 1,
@@ -31,7 +31,7 @@ if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
         value=df["gol_home_ft"].astype(str) + "-" + df["gol_away_ft"].astype(str)
     )
 
-# --- Aggiungi colonna risultato_ht ---
+# --- Colonna risultato_ht ---
 if "gol_home_ht" in df.columns and "gol_away_ht" in df.columns:
     df.insert(
         loc=df.columns.get_loc("gol_home_ht"),
@@ -42,7 +42,7 @@ if "gol_home_ht" in df.columns and "gol_away_ht" in df.columns:
 filters = {}
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
-# Filtri
+# Filtri dinamici
 for col in df.columns:
     if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
        any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
@@ -92,7 +92,7 @@ st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
 
-# --- FUNZIONE DISTRIBUZIONE & WINRATE ---
+# --- Funzione distribuzione & WinRate ---
 def mostra_distribuzione(df, col_risultato, titolo):
     risultati_interessanti = [
         "0-0", "0-1", "0-2", "0-3",
@@ -120,6 +120,7 @@ def mostra_distribuzione(df, col_risultato, titolo):
     distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(df) * 100).round(2)
     st.table(distribuzione)
 
+    # Calcolo WinRate 1-X-2
     count_1 = distribuzione[distribuzione["Risultato"].str.contains("casa vince")].Conteggio.sum() + \
               distribuzione[distribuzione["Risultato"].isin(["1-0","2-0","2-1","3-0","3-1","3-2"])].Conteggio.sum()
     count_2 = distribuzione[distribuzione["Risultato"].str.contains("ospite vince")].Conteggio.sum() + \
@@ -136,7 +137,35 @@ def mostra_distribuzione(df, col_risultato, titolo):
     st.subheader(f"WinRate {titolo}")
     st.table(winrate_df)
 
-# --- DISTRIBUZIONI FT & HT ---
+# --- Distribuzioni FT & HT ---
 if not filtered_df.empty:
     mostra_distribuzione(filtered_df, "risultato_ft", "Risultati Finali (FT)")
-    mostra_distribuzione(filtered_df, "risultato_ht", "Risultati HT")
+    mostra_distribuzione(filtered_df, "risultato_ht", "Risultati Primo Tempo (HT)")
+
+# --- Analisi Rimonta Casa ---
+if not filtered_df.empty and "primo_gol_home" in filtered_df.columns and "secondo_gol_home" in filtered_df.columns:
+    home_vantaggio = filtered_df[filtered_df["primo_gol_home"].notnull()]
+    count_raddoppio = 0
+    count_pareggio = 0
+    total_cases = 0
+
+    for _, row in home_vantaggio.iterrows():
+        primo_home = row["primo_gol_home"]
+        secondo_home = row["secondo_gol_home"] if pd.notnull(row["secondo_gol_home"]) else None
+        primo_away = row["primo_gol_away"] if "primo_gol_away" in row and pd.notnull(row["primo_gol_away"]) else None
+
+        if secondo_home is not None:
+            if primo_away is None or primo_away > secondo_home:
+                count_raddoppio += 1
+            elif primo_away < secondo_home:
+                count_pareggio += 1
+        else:
+            if primo_away is not None and primo_away > primo_home:
+                count_pareggio += 1
+
+        total_cases += 1
+
+    st.subheader("Analisi Vantaggio Casa (1-0)")
+    st.write(f"**Partite analizzate:** {total_cases}")
+    st.write(f"**Da 1-0 a 2-0:** {count_raddoppio} ({round((count_raddoppio/total_cases)*100, 2)}%)")
+    st.write(f"**Da 1-0 a 1-1:** {count_pareggio} ({round((count_pareggio/total_cases)*100, 2)}%)")
