@@ -1,7 +1,6 @@
 import streamlit as st
 import psycopg2
 import pandas as pd
-import numpy as np
 
 st.title("Filtro Avanzato Matches - Tutto il Dataset")
 
@@ -26,14 +25,21 @@ st.write(f"**Righe totali:** {len(df)}")
 
 filters = {}
 for col in df.columns:
-    if pd.api.types.is_numeric_dtype(df[col]):  # Se colonna numerica
+    if col.lower() == "id":  # Ignora ID
+        continue
+
+    # Se colonna contiene "odd" o valori numerici decimali
+    if "odd" in col.lower() and pd.api.types.is_numeric_dtype(df[col]):
         min_val = float(df[col].min())
         max_val = float(df[col].max())
-        selected_range = st.slider(f"Filtro per {col}", min_val, max_val, (min_val, max_val))
+        selected_range = st.slider(
+            f"Filtro per {col} (Quota)", 
+            min_val, max_val, (min_val, max_val), step=0.01
+        )
         filters[col] = selected_range
-    else:  # Se colonna testuale/categoriale
+    else:
         unique_vals = df[col].dropna().unique().tolist()
-        if len(unique_vals) > 1:
+        if len(unique_vals) > 1 and len(unique_vals) <= 100:  # Evita liste troppo lunghe
             selected_val = st.selectbox(f"Filtra per {col} (opzionale)", ["Tutti"] + [str(v) for v in unique_vals])
             if selected_val != "Tutti":
                 filters[col] = selected_val
@@ -41,9 +47,9 @@ for col in df.columns:
 # Applico i filtri
 filtered_df = df.copy()
 for col, val in filters.items():
-    if isinstance(val, tuple):  # Filtro range numerico
+    if isinstance(val, tuple):  # Range numerico
         filtered_df = filtered_df[(filtered_df[col] >= val[0]) & (filtered_df[col] <= val[1])]
-    else:  # Filtro stringa
+    else:
         filtered_df = filtered_df[filtered_df[col].astype(str) == val]
 
 st.subheader("Dati Filtrati")
