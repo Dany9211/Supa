@@ -1,11 +1,11 @@
-
 import streamlit as st 
 import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (FT, HT & Analisi Rimonta)")
+st.title("Filtro Completo Matches (FT, HT & First To Score)")
 
+# Funzione di connessione
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
@@ -19,6 +19,7 @@ def run_query(query):
     conn.close()
     return df
 
+# Carica dataset
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
@@ -41,7 +42,8 @@ filters = {}
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or        any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
+    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
+       any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
     if col in gol_columns_dropdown:
@@ -75,6 +77,7 @@ for col in df.columns:
                 if selected_val != "Tutti":
                     filters[col] = selected_val
 
+# Applica i filtri
 filtered_df = df.copy()
 for col, val in filters.items():
     if isinstance(val, tuple):
@@ -88,6 +91,7 @@ st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
 
+# Distribuzione Risultati FT/HT
 def mostra_distribuzione(df, col_risultato, titolo):
     risultati_interessanti = [
         "0-0", "0-1", "0-2", "0-3",
@@ -115,9 +119,12 @@ def mostra_distribuzione(df, col_risultato, titolo):
     distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(df) * 100).round(2)
     st.table(distribuzione)
 
-    count_1 = distribuzione[distribuzione["Risultato"].str.contains("casa vince")].Conteggio.sum() +               distribuzione[distribuzione["Risultato"].isin(["1-0","2-0","2-1","3-0","3-1","3-2"])].Conteggio.sum()
-    count_2 = distribuzione[distribuzione["Risultato"].str.contains("ospite vince")].Conteggio.sum() +               distribuzione[distribuzione["Risultato"].isin(["0-1","0-2","0-3","1-2","1-3","2-3"])].Conteggio.sum()
-    count_x = distribuzione[distribuzione["Risultato"].str.contains("pareggio")].Conteggio.sum() +               distribuzione[distribuzione["Risultato"].isin(["0-0","1-1","2-2","3-3"])].Conteggio.sum()
+    count_1 = distribuzione[distribuzione["Risultato"].str.contains("casa vince")].Conteggio.sum() + \
+              distribuzione[distribuzione["Risultato"].isin(["1-0","2-0","2-1","3-0","3-1","3-2"])].Conteggio.sum()
+    count_2 = distribuzione[distribuzione["Risultato"].str.contains("ospite vince")].Conteggio.sum() + \
+              distribuzione[distribuzione["Risultato"].isin(["0-1","0-2","0-3","1-2","1-3","2-3"])].Conteggio.sum()
+    count_x = distribuzione[distribuzione["Risultato"].str.contains("pareggio")].Conteggio.sum() + \
+              distribuzione[distribuzione["Risultato"].isin(["0-0","1-1","2-2","3-3"])].Conteggio.sum()
 
     totale = len(df)
     winrate_df = pd.DataFrame({
@@ -132,56 +139,22 @@ if not filtered_df.empty:
     mostra_distribuzione(filtered_df, "risultato_ft", "Risultati Finali (FT)")
     mostra_distribuzione(filtered_df, "risultato_ht", "Risultati Primo Tempo (HT)")
 
-# Analisi Vantaggio Casa: 1-0
-if not filtered_df.empty and "primo_gol_home" in filtered_df.columns:
-    home_vantaggio = filtered_df[filtered_df["primo_gol_home"].notnull() &
-                                 ((filtered_df["primo_gol_away"].isnull()) | 
-                                  (filtered_df["primo_gol_home"] < filtered_df["primo_gol_away"]))]
+# FIRST TO SCORE
+if not filtered_df.empty and "primo_gol_home" in filtered_df.columns and "primo_gol_away" in filtered_df.columns:
+    def first_to_score(row):
+        home_goal = row["primo_gol_home"]
+        away_goal = row["primo_gol_away"]
+        if pd.isnull(home_goal) and pd.isnull(away_goal):
+            return "Nessun Gol"
+        if pd.isnull(home_goal):
+            return "Away"
+        if pd.isnull(away_goal):
+            return "Home"
+        return "Home" if home_goal < away_goal else "Away"
 
-    count_raddoppio = 0
-    count_pareggio = 0
-    total_cases = 0
-
-    for _, row in home_vantaggio.iterrows():
-        primo_home = row["primo_gol_home"]
-        secondo_home = row["secondo_gol_home"] if pd.notnull(row.get("secondo_gol_home")) else None
-        primo_away = row["primo_gol_away"] if pd.notnull(row.get("primo_gol_away")) else None
-
-        if secondo_home is not None and (primo_away is None or secondo_home < primo_away):
-            count_raddoppio += 1
-        elif primo_away is not None and primo_away < (secondo_home if secondo_home else 999):
-            count_pareggio += 1
-
-        total_cases += 1
-
-    st.subheader("Analisi Vantaggio Casa (1-0)")
-    st.write(f"**Partite analizzate:** {total_cases}")
-    st.write(f"**Da 1-0 a 2-0:** {count_raddoppio} ({round((count_raddoppio/total_cases)*100, 2)}%)")
-    st.write(f"**Da 1-0 a 1-1:** {count_pareggio} ({round((count_pareggio/total_cases)*100, 2)}%)")
-
-# Analisi Vantaggio Trasferta: 0-1
-if not filtered_df.empty and "primo_gol_away" in filtered_df.columns:
-    away_vantaggio = filtered_df[filtered_df["primo_gol_away"].notnull() &
-                                 ((filtered_df["primo_gol_home"].isnull()) | 
-                                  (filtered_df["primo_gol_away"] < filtered_df["primo_gol_home"]))]
-
-    count_raddoppio_away = 0
-    count_pareggio_home = 0
-    total_cases_away = 0
-
-    for _, row in away_vantaggio.iterrows():
-        primo_away = row["primo_gol_away"]
-        secondo_away = row["secondo_gol_away"] if pd.notnull(row.get("secondo_gol_away")) else None
-        primo_home = row["primo_gol_home"] if pd.notnull(row.get("primo_gol_home")) else None
-
-        if secondo_away is not None and (primo_home is None or secondo_away < primo_home):
-            count_raddoppio_away += 1
-        elif primo_home is not None and primo_home < (secondo_away if secondo_away else 999):
-            count_pareggio_home += 1
-
-        total_cases_away += 1
-
-    st.subheader("Analisi Vantaggio Trasferta (0-1)")
-    st.write(f"**Partite analizzate:** {total_cases_away}")
-    st.write(f"**Da 0-1 a 0-2:** {count_raddoppio_away} ({round((count_raddoppio_away/total_cases_away)*100, 2)}%)")
-    st.write(f"**Da 0-1 a 1-1:** {count_pareggio_home} ({round((count_pareggio_home/total_cases_away)*100, 2)}%)")
+    filtered_df["first_to_score"] = filtered_df.apply(first_to_score, axis=1)
+    st.subheader("Distribuzione First To Score")
+    first_counts = filtered_df["first_to_score"].value_counts().reset_index()
+    first_counts.columns = ["First To Score", "Conteggio"]
+    first_counts["Percentuale %"] = (first_counts["Conteggio"] / len(filtered_df) * 100).round(2)
+    st.table(first_counts)
