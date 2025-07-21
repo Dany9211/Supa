@@ -1,9 +1,9 @@
-import streamlit as st
+import streamlit as st 
 import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (con WinRate & ROI)")
+st.title("Filtro Completo Matches (filtri ottimizzati) + Risultato FT")
 
 # Funzione di connessione
 def run_query(query):
@@ -23,15 +23,23 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
-# Crea colonna risultato_ft
-df["risultato_ft"] = df["gol_home_ft"].astype(str) + " - " + df["gol_away_ft"].astype(str)
+# Creiamo la colonna "risultato_ft"
+if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
+    df.insert(
+        loc=df.columns.get_loc("away_team") + 1,
+        column="risultato_ft",
+        value=df["gol_home_ft"].astype(str) + "-" + df["gol_away_ft"].astype(str)
+    )
 
 filters = {}
+
+# Colonne gol con menu a tendina
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
-# Filtri dinamici
 for col in df.columns:
-    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
+    # Escludiamo colonne indesiderate
+    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
+       any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
     if col in gol_columns_dropdown:
@@ -42,6 +50,7 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
+        # Se numerica, slider
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
             min_val = col_temp.min(skipna=True)
@@ -65,7 +74,7 @@ for col in df.columns:
                 if selected_val != "Tutti":
                     filters[col] = selected_val
 
-# Applica filtri
+# Applica i filtri
 filtered_df = df.copy()
 for col, val in filters.items():
     if isinstance(val, tuple):
@@ -79,52 +88,31 @@ st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
 
-# Distribuzione dei risultati esatti principali
+# Lista dei risultati che vogliamo mostrare
 risultati_interessanti = [
-    "0 - 0", "0 - 1", "0 - 2", "0 - 3",
-    "1 - 0", "1 - 1", "1 - 2", "1 - 3",
-    "2 - 0", "2 - 1", "2 - 2", "2 - 3",
-    "3 - 0", "3 - 1", "3 - 2", "3 - 3"
+    "0-0", "0-1", "0-2", "0-3",
+    "1-0", "1-1", "1-2", "1-3",
+    "2-0", "2-1", "2-2", "2-3",
+    "3-0", "3-1", "3-2", "3-3"
 ]
-distribuzione = filtered_df["risultato_ft"].value_counts().reset_index()
-distribuzione.columns = ["Risultato", "Conteggio"]
-distribuzione = distribuzione[distribuzione["Risultato"].isin(risultati_interessanti)]
-distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
-st.subheader("Distribuzione Risultati Esatti")
-st.dataframe(distribuzione)
 
-# WinRate & ROI calcolato con quote odd_home, odd_draw, odd_away
-def calcola_roi(filtered_df):
-    esiti = []
-    n_bets = []
-    win_rates = []
-    profits = []
-    rois = []
+# Aggiungiamo categorie "Altro risultato casa vince", "Altro risultato ospite vince", "Altro pareggio"
+def classifica_risultato(ris):
+    home, away = map(int, ris.split("-"))
+    if ris in risultati_interessanti:
+        return ris
+    if home > away:
+        return "Altro risultato casa vince"
+    elif home < away:
+        return "Altro risultato ospite vince"
+    else:
+        return "Altro pareggio"
 
-    outcomes = {"1": "odd_home", "X": "odd_draw", "2": "odd_away"}
-    for esito, quota_col in outcomes.items():
-        n_bet = len(filtered_df)
-        n_win = 0
-        profit = 0
+if not filtered_df.empty:
+    filtered_df["risultato_classificato"] = filtered_df["risultato_ft"].apply(classifica_risultato)
 
-        for _, row in filtered_df.iterrows():
-            if (row["gol_home_ft"] > row["gol_away_ft"] and esito == "1") or \
-               (row["gol_home_ft"] < row["gol_away_ft"] and esito == "2") or \
-               (row["gol_home_ft"] == row["gol_away_ft"] and esito == "X"):
-                n_win += 1
-                profit += (row[quota_col] - 1) * 0.01
-            else:
-                profit -= 0.01
-
-        esiti.append(esito)
-        n_bets.append(n_bet)
-        win_rates.append(round((n_win / n_bet) * 100, 2) if n_bet > 0 else 0)
-        profits.append(round(profit * 100, 2))  # convertito in punti su 1%
-        rois.append(round((profit / (n_bet * 0.01)) * 100, 2) if n_bet > 0 else 0)
-
-    return pd.DataFrame({"Esito": esiti, "N. Bets": n_bets, "WinRate %": win_rates, "Profit (1%)": profits, "ROI %": rois})
-
-if len(filtered_df) > 0:
-    st.subheader("WinRate & ROI (1% stake)")
-    roi_df = calcola_roi(filtered_df)
-    st.dataframe(roi_df)
+    st.subheader("Distribuzione Risultati Esatti (FT)")
+    distribuzione = filtered_df["risultato_classificato"].value_counts().reset_index()
+    distribuzione.columns = ["Risultato FT", "Conteggio"]
+    distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
+    st.table(distribuzione)
