@@ -4,7 +4,7 @@ import pandas as pd
 
 st.title("Filtro Completo Matches")
 
-# Connessione al database
+# Connessione DB
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
@@ -18,49 +18,54 @@ def run_query(query):
     conn.close()
     return df
 
-# Carico tutto il dataset
+# Carica dataset
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali:** {len(df)}")
 
 filters = {}
 
+# Colonne gol da filtrare con menu a tendina
+gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
+
 for col in df.columns:
     if col.lower() == "id":  # Ignora ID
         continue
 
-    # Verifica se la colonna è numerica o contiene valori numerici
-    col_temp = df[col].astype(str).str.replace(",", ".")
-    numeric_check = pd.to_numeric(col_temp, errors="coerce")
-
-    if numeric_check.notnull().sum() > 0:  # Se almeno qualche valore è numerico
-        df[col] = numeric_check
-        min_val = float(df[col].min(skipna=True))
-        max_val = float(df[col].max(skipna=True))
-        if pd.notna(min_val) and pd.notna(max_val):
+    if col in gol_columns_dropdown:
+        unique_vals = sorted(df[col].dropna().unique().tolist())
+        selected_val = st.selectbox(f"Filtra per {col}", ["Tutti"] + [str(v) for v in unique_vals])
+        if selected_val != "Tutti":
+            filters[col] = selected_val
+    else:
+        # Controlla se la colonna contiene numeri
+        col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
+        if col_temp.notnull().sum() > 0:
+            min_val = float(col_temp.min(skipna=True))
+            max_val = float(col_temp.max(skipna=True))
             selected_range = st.slider(
                 f"Filtro per {col}",
-                float(min_val), float(max_val),
-                (float(min_val), float(max_val)),
+                min_val, max_val,
+                (min_val, max_val),
                 step=0.01
             )
-            filters[col] = selected_range
-    else:
-        unique_vals = df[col].dropna().unique().tolist()
-        if len(unique_vals) > 0:
-            selected_val = st.selectbox(
-                f"Filtra per {col} (opzionale)",
-                ["Tutti"] + [str(v) for v in unique_vals]
-            )
-            if selected_val != "Tutti":
-                filters[col] = selected_val
+            filters[col] = (selected_range, col_temp)
+        else:
+            unique_vals = df[col].dropna().unique().tolist()
+            if len(unique_vals) > 0:
+                selected_val = st.selectbox(
+                    f"Filtra per {col} (opzionale)",
+                    ["Tutti"] + [str(v) for v in unique_vals]
+                )
+                if selected_val != "Tutti":
+                    filters[col] = selected_val
 
-# Applica filtri
+# Applica i filtri
 filtered_df = df.copy()
 for col, val in filters.items():
     if isinstance(val, tuple):
-        filtered_df = filtered_df[
-            (filtered_df[col] >= val[0]) & (filtered_df[col] <= val[1])
-        ]
+        range_vals, col_temp = val
+        mask = (col_temp >= range_vals[0]) & (col_temp <= range_vals[1])
+        filtered_df = filtered_df[mask.fillna(True)]
     else:
         filtered_df = filtered_df[filtered_df[col].astype(str) == val]
 
