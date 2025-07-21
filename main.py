@@ -3,9 +3,9 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (senza filtri gol sequenziali)")
+st.title("Filtro Completo Matches (filtri ottimizzati)")
 
-# Funzione connessione al DB
+# Funzione di connessione
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
@@ -29,8 +29,8 @@ filters = {}
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    # Escludiamo ID e gol sequenziali
-    if col.lower() == "id" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
+    # Escludiamo colonne indesiderate
+    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
     if col in gol_columns_dropdown:
