@@ -5,7 +5,7 @@ import numpy as np
 
 st.title("Filtro Completo Matches (senza filtri gol sequenziali)")
 
-# Connessione DB
+# Funzione connessione al DB
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
@@ -29,8 +29,9 @@ filters = {}
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    if col.lower() == "id" or "primo" in col.lower() or "secondo" in col.lower() or "terzo" in col.lower():
-        continue  # Rimuoviamo filtri per gol sequenziali
+    # Escludiamo ID e gol sequenziali
+    if col.lower() == "id" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
+        continue
 
     if col in gol_columns_dropdown:
         unique_vals = sorted(df[col].dropna().unique().tolist())
@@ -40,7 +41,7 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
-        # Gestione numeri
+        # Se numerica, slider
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
             min_val = col_temp.min(skipna=True)
