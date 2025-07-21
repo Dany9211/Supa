@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (filtri ottimizzati) + Risultati FT, HT, BTTS & Over Goals")
+st.title("Filtro Completo Matches (FT, HT, BTTS & Over Goals con Odd Minima)")
 
 # Funzione di connessione
 def run_query(query):
@@ -79,6 +79,7 @@ for col in df.columns:
                 if selected_val != "Tutti":
                     filters[col] = selected_val
 
+# Applica i filtri
 filtered_df = df.copy()
 for col, val in filters.items():
     if isinstance(val, tuple):
@@ -91,6 +92,7 @@ for col, val in filters.items():
 st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
+
 
 # --- FUNZIONE DISTRIBUZIONE & WINRATE ---
 def mostra_distribuzione(df, col_risultato, titolo):
@@ -118,8 +120,10 @@ def mostra_distribuzione(df, col_risultato, titolo):
     distribuzione = df[f"{col_risultato}_classificato"].value_counts().reset_index()
     distribuzione.columns = ["Risultato", "Conteggio"]
     distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(df) * 100).round(2)
+    distribuzione["Odd Minima"] = distribuzione["Percentuale %"].apply(lambda x: round(100/x, 2) if x > 0 else "-")
     st.table(distribuzione)
 
+    # WinRate 1X2
     count_1 = distribuzione[distribuzione["Risultato"].str.contains("casa vince")].Conteggio.sum() + \
               distribuzione[distribuzione["Risultato"].isin(["1-0","2-0","2-1","3-0","3-1","3-2"])].Conteggio.sum()
     count_2 = distribuzione[distribuzione["Risultato"].str.contains("ospite vince")].Conteggio.sum() + \
@@ -128,18 +132,27 @@ def mostra_distribuzione(df, col_risultato, titolo):
               distribuzione[distribuzione["Risultato"].isin(["0-0","1-1","2-2","3-3"])].Conteggio.sum()
 
     totale = len(df)
+    winrate = [
+        round((count_1/totale)*100,2),
+        round((count_x/totale)*100,2),
+        round((count_2/totale)*100,2)
+    ]
+    odd_minime = [round(100/w,2) if w>0 else "-" for w in winrate]
+
     winrate_df = pd.DataFrame({
         "Esito": ["1 (Casa)", "X (Pareggio)", "2 (Trasferta)"],
         "Conteggio": [count_1, count_x, count_2],
-        "WinRate %": [round((count_1/totale)*100,2), round((count_x/totale)*100,2), round((count_2/totale)*100,2)]
+        "WinRate %": winrate,
+        "Odd Minima": odd_minime
     })
     st.subheader(f"WinRate {titolo}")
     st.table(winrate_df)
 
+
 # --- DISTRIBUZIONI FT & HT ---
 if not filtered_df.empty:
     mostra_distribuzione(filtered_df, "risultato_ft", "Risultati Finali (FT)")
-    mostra_distribuzione(filtered_df, "risultato_ht", "Risultati HT")
+    mostra_distribuzione(filtered_df, "risultato_ht", "Risultati Primo Tempo (HT)")
 
 # --- CALCOLO BTTS & OVER GOALS ---
 if not filtered_df.empty:
@@ -148,20 +161,22 @@ if not filtered_df.empty:
     filtered_df["away_g"] = temp[1]
     filtered_df["tot_goals"] = filtered_df["home_g"] + filtered_df["away_g"]
 
+    total_games = len(filtered_df)
+
     # BTTS
     btts_count = len(filtered_df[(filtered_df["home_g"] > 0) & (filtered_df["away_g"] > 0)])
-    perc_btts = round(btts_count / len(filtered_df) * 100, 2) if len(filtered_df) > 0 else 0
+    perc_btts = round(btts_count / total_games * 100, 2) if total_games > 0 else 0
+    odd_btts = round(100 / perc_btts, 2) if perc_btts > 0 else "-"
+    btts_df = pd.DataFrame([[btts_count, perc_btts, odd_btts]], columns=["Conteggio", "Percentuale %", "Odd Minima"])
     st.subheader("BTTS (Both Teams To Score)")
-    st.write(f"**Partite BTTS SI:** {btts_count}")
-    st.write(f"**Percentuale BTTS SI:** {perc_btts}%")
+    st.table(btts_df)
 
     # Over Goals
     thresholds = [0.5, 1.5, 2.5, 3.5, 4.5]
     over_data = []
-    total = len(filtered_df)
     for t in thresholds:
         count_over = (filtered_df["tot_goals"] > t).sum()
-        perc_over = round(count_over / total * 100, 2) if total > 0 else 0
+        perc_over = round(count_over / total_games * 100, 2) if total_games > 0 else 0
         odd_min = round(100 / perc_over, 2) if perc_over > 0 else "-"
         over_data.append([f"Over {t}", count_over, perc_over, odd_min])
     over_df = pd.DataFrame(over_data, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
