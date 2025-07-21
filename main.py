@@ -1,6 +1,7 @@
 import streamlit as st
 import psycopg2
 import pandas as pd
+import numpy as np
 
 st.title("Filtro Completo Matches")
 
@@ -24,11 +25,10 @@ st.write(f"**Righe totali nel dataset:** {len(df)}")
 
 filters = {}
 
-# Colonne gol con menu a tendina
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    if col.lower() == "id" or "minutaggio" in col.lower():  # Escludi ID e minutaggio
+    if col.lower() == "id" or "minutaggio" in col.lower():
         continue
 
     if col in gol_columns_dropdown:
@@ -39,23 +39,26 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
-        # Controlla se numerico
+        # Converti numeri
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
-            # Se la colonna riguarda gol (es. primo_gol_home) forziamo minimo 0
-            if "gol" in col.lower():
-                min_val = 0
-                max_val = float(col_temp.max(skipna=True))
-            else:
-                min_val = float(col_temp.min(skipna=True))
-                max_val = float(col_temp.max(skipna=True))
-            selected_range = st.slider(
-                f"Filtro per {col}",
-                min_val, max_val,
-                (min_val, max_val),
-                step=1.0 if "gol" in col.lower() else 0.01
-            )
-            filters[col] = (selected_range, col_temp)
+            min_val = col_temp.min(skipna=True)
+            max_val = col_temp.max(skipna=True)
+            if pd.notna(min_val) and pd.notna(max_val):
+                # Forza range per colonne gol (primo_gol, secondo_gol, ecc.)
+                if "gol" in col.lower():
+                    min_val = 0
+                    step_val = 1.0
+                else:
+                    step_val = 0.01
+
+                selected_range = st.slider(
+                    f"Filtro per {col}",
+                    float(min_val), float(max_val),
+                    (float(min_val), float(max_val)),
+                    step=step_val
+                )
+                filters[col] = (selected_range, col_temp)
         else:
             unique_vals = df[col].dropna().unique().tolist()
             if len(unique_vals) > 0:
