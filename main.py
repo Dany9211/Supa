@@ -38,7 +38,8 @@ gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_h
 
 for col in df.columns:
     # Escludiamo colonne indesiderate
-    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
+    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
+       any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
     if col in gol_columns_dropdown:
@@ -86,3 +87,17 @@ for col, val in filters.items():
 st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
+
+# Distribuzione risultati esatti
+if not filtered_df.empty and "risultato_ft" in filtered_df.columns:
+    st.subheader("Distribuzione Risultati Esatti (FT)")
+    distribuzione = (
+        filtered_df["risultato_ft"]
+        .value_counts()
+        .reset_index()
+        .rename(columns={"index": "Risultato FT", "risultato_ft": "Conteggio"})
+    )
+    distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
+    st.table(distribuzione)
+else:
+    st.warning("Nessun dato disponibile per calcolare la distribuzione dei risultati esatti.")
