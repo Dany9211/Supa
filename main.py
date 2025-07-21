@@ -1,105 +1,111 @@
 import streamlit as st
-import psycopg2
 import pandas as pd
-import numpy as np
+import psycopg2
 
-st.title("Filtro Completo Matches + ROI/WinRate")
-
-# Connessione al DB
+# Connessione al database
+@st.cache_data
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
         port=st.secrets["postgres"]["port"],
         dbname=st.secrets["postgres"]["dbname"],
         user=st.secrets["postgres"]["user"],
-        password=st.secrets["postgres"]["password"],
-        sslmode="require"
+        password=st.secrets["postgres"]["password"]
     )
     df = pd.read_sql(query, conn)
     conn.close()
     return df
 
-# Carica dataset
-df = run_query('SELECT * FROM "Matches";')
-st.write(f"**Righe totali nel dataset:** {len(df)}")
+st.title("Analisi ROI Back e Lay - Football")
 
-filters = {}
+# Query dataset
+query = "SELECT * FROM Matches"
+df = run_query(query)
 
-# Colonne gol con menu a tendina
-gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
-
-for col in df.columns:
-    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
-        continue
-
-    if col in gol_columns_dropdown:
-        unique_vals = sorted(df[col].dropna().unique().tolist())
-        if 0 not in unique_vals:
-            unique_vals = [0] + unique_vals
-        selected_val = st.selectbox(f"Filtra per {col}", ["Tutti"] + [str(v) for v in unique_vals])
-        if selected_val != "Tutti":
-            filters[col] = int(selected_val)
+# Calcolo colonna "esito" (1, X, 2)
+def calcola_esito(row):
+    if row["gol_home_ft"] > row["gol_away_ft"]:
+        return "1"
+    elif row["gol_home_ft"] < row["gol_away_ft"]:
+        return "2"
     else:
-        col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
-        if col_temp.notnull().sum() > 0:
-            min_val = col_temp.min(skipna=True)
-            max_val = col_temp.max(skipna=True)
-            if pd.notna(min_val) and pd.notna(max_val):
-                step_val = 0.01
-                selected_range = st.slider(
-                    f"Filtro per {col}",
-                    float(min_val), float(max_val),
-                    (float(min_val), float(max_val)),
-                    step=step_val
-                )
-                filters[col] = (selected_range, col_temp)
-        else:
-            unique_vals = df[col].dropna().unique().tolist()
-            if len(unique_vals) > 0:
-                selected_val = st.selectbox(
-                    f"Filtra per {col} (opzionale)",
-                    ["Tutti"] + [str(v) for v in unique_vals]
-                )
-                if selected_val != "Tutti":
-                    filters[col] = selected_val
+        return "X"
 
-# Applica i filtri
-filtered_df = df.copy()
-for col, val in filters.items():
-    if isinstance(val, tuple):
-        range_vals, col_temp = val
-        mask = (col_temp >= range_vals[0]) & (col_temp <= range_vals[1])
-        filtered_df = filtered_df[mask.fillna(True)]
-    else:
-        filtered_df = filtered_df[filtered_df[col].astype(str) == str(val)]
+df["esito"] = df.apply(calcola_esito, axis=1)
 
+# Filtri di base
+st.sidebar.header("Filtri")
+
+# Filtro campionato
+if "league" in df.columns:
+    campionati = ["Tutti"] + sorted(df["league"].dropna().unique().tolist())
+    campionato = st.sidebar.selectbox("Seleziona Campionato", campionati)
+    if campionato != "Tutti":
+        df = df[df["league"] == campionato]
+
+# Filtro squadre
+home_teams = ["Tutte"] + sorted(df["home_team"].dropna().unique().tolist())
+away_teams = ["Tutte"] + sorted(df["away_team"].dropna().unique().tolist())
+
+home_filter = st.sidebar.selectbox("Seleziona Squadra Home", home_teams)
+away_filter = st.sidebar.selectbox("Seleziona Squadra Away", away_teams)
+
+if home_filter != "Tutte":
+    df = df[df["home_team"] == home_filter]
+if away_filter != "Tutte":
+    df = df[df["away_team"] == away_filter]
+
+# Filtro label odds
+if "label_odds" in df.columns:
+    label_odds = ["Tutte"] + sorted(df["label_odds"].dropna().unique().tolist())
+    label_odds_filter = st.sidebar.selectbox("Seleziona Label Odds", label_odds)
+    if label_odds_filter != "Tutte":
+        df = df[df["label_odds"] == label_odds_filter]
+
+# Mostra tabella filtrata
 st.subheader("Dati Filtrati")
-st.dataframe(filtered_df)
-st.write(f"**Righe visualizzate:** {len(filtered_df)}")
+st.dataframe(df)
 
 # Calcolo ROI e WinRate
-if not filtered_df.empty:
-    outcomes = ["1", "X", "2"]
-    results = []
+def calcola_roi_winrate(df):
+    risultati = []
+    for esito in ["1", "X", "2"]:
+        n_bets = len(df)  # puntiamo su ogni partita
+        n_win = (df["esito"] == esito).sum()
+        strike_rate = (n_win / n_bets * 100) if n_bets > 0 else 0
 
-    for esito, quota_col in zip(outcomes, ["odd_home", "odd_draw", "odd_away"]):
-        n_bets = len(filtered_df)
-        n_win = (filtered_df["esito"] == esito).sum()
-        winrate = (n_win / n_bets) * 100 if n_bets > 0 else 0
+        # Calcolo profitto e ROI
+        col_odds = None
+        if esito == "1" and "odd_1" in df.columns:
+            col_odds = "odd_1"
+        elif esito == "X" and "odd_x" in df.columns:
+            col_odds = "odd_x"
+        elif esito == "2" and "odd_2" in df.columns:
+            col_odds = "odd_2"
 
-        # Quote in float
-        odds = pd.to_numeric(filtered_df[quota_col].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
-        profit = (odds[filtered_df["esito"] == esito] - 1).sum() - (n_bets - n_win)
-        roi = (profit / n_bets) * 100 if n_bets > 0 else 0
+        profitto = 0
+        if col_odds:
+            for _, row in df.iterrows():
+                if row["esito"] == esito:
+                    profitto += (row[col_odds] - 1)  # vincita - stake
+                else:
+                    profitto -= 1  # stake persa
+            roi = (profitto / n_bets * 100) if n_bets > 0 else 0
+        else:
+            roi = 0
 
-        results.append({
+        risultati.append({
             "Esito": esito,
-            "N. Bets": n_bets,
-            "WinRate %": round(winrate, 2),
-            "Profit (Points)": round(profit, 2),
-            "ROI %": round(roi, 2)
+            "N Bets": n_bets,
+            "Win%": round(strike_rate, 2),
+            "ROI %": round(roi, 2),
+            "Profitto (1%)": round(profitto, 2)
         })
+    return pd.DataFrame(risultati)
 
-    roi_df = pd.DataFrame(results)
-    st.subheader("ROI & WinRate per Esito (1% stake)")
-    st.dataframe(roi_df)
+if len(df) > 0:
+    st.subheader("ROI & WinRate")
+    df_roi = calcola_roi_winrate(df)
+    st.table(df_roi)
+else:
+    st.warning("Nessun dato corrisponde ai filtri selezionati.")
