@@ -23,7 +23,7 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
-# Creiamo la nuova colonna "risultato_ft"
+# Creiamo la nuova colonna "risultato_ft" dopo la colonna "away_team"
 if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
     df.insert(
         loc=df.columns.get_loc("away_team") + 1,
@@ -91,12 +91,8 @@ st.write(f"**Righe visualizzate:** {len(filtered_df)}")
 # Distribuzione risultati esatti
 if not filtered_df.empty and "risultato_ft" in filtered_df.columns:
     st.subheader("Distribuzione Risultati Esatti (FT)")
-    distribuzione = (
-        filtered_df["risultato_ft"]
-        .value_counts()
-        .reset_index()
-        .rename(columns={"index": "Risultato FT", "risultato_ft": "Conteggio"})
-    )
+    distribuzione = filtered_df["risultato_ft"].value_counts().reset_index()
+    distribuzione.columns = ["Risultato FT", "Conteggio"]
     distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
     st.table(distribuzione)
 else:
