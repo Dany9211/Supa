@@ -3,9 +3,9 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (filtri ottimizzati)")
+st.title("Filtro Completo Matches + ROI/WinRate")
 
-# Funzione di connessione
+# Connessione al DB
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
@@ -29,7 +29,6 @@ filters = {}
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
-    # Escludiamo colonne indesiderate
     if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
@@ -41,7 +40,6 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
-        # Se numerica, slider
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
             min_val = col_temp.min(skipna=True)
@@ -78,3 +76,30 @@ for col, val in filters.items():
 st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
+
+# Calcolo ROI e WinRate
+if not filtered_df.empty:
+    outcomes = ["1", "X", "2"]
+    results = []
+
+    for esito, quota_col in zip(outcomes, ["odd_home", "odd_draw", "odd_away"]):
+        n_bets = len(filtered_df)
+        n_win = (filtered_df["esito"] == esito).sum()
+        winrate = (n_win / n_bets) * 100 if n_bets > 0 else 0
+
+        # Quote in float
+        odds = pd.to_numeric(filtered_df[quota_col].astype(str).str.replace(",", "."), errors="coerce").fillna(0)
+        profit = (odds[filtered_df["esito"] == esito] - 1).sum() - (n_bets - n_win)
+        roi = (profit / n_bets) * 100 if n_bets > 0 else 0
+
+        results.append({
+            "Esito": esito,
+            "N. Bets": n_bets,
+            "WinRate %": round(winrate, 2),
+            "Profit (Points)": round(profit, 2),
+            "ROI %": round(roi, 2)
+        })
+
+    roi_df = pd.DataFrame(results)
+    st.subheader("ROI & WinRate per Esito (1% stake)")
+    st.dataframe(roi_df)
