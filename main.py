@@ -23,6 +23,14 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
+# Conversione sicura dei gol in numeri interi
+df["gol_home_ft"] = pd.to_numeric(df["gol_home_ft"], errors="coerce").fillna(0).astype(int)
+df["gol_away_ft"] = pd.to_numeric(df["gol_away_ft"], errors="coerce").fillna(0).astype(int)
+
+# Debug: mostra i valori unici
+st.write("Valori unici gol_home_ft:", df["gol_home_ft"].unique())
+st.write("Valori unici gol_away_ft:", df["gol_away_ft"].unique())
+
 # Calcola esito (1/X/2)
 def determina_esito(row):
     if row["gol_home_ft"] > row["gol_away_ft"]:
@@ -47,8 +55,6 @@ for col in df.columns:
     if col in gol_columns_dropdown:
         # Pulizia valori: int, no duplicati
         unique_vals = sorted(set(pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)))
-        if 0 not in unique_vals:
-            unique_vals = [0] + unique_vals
         selected_val = st.selectbox(
             f"Filtra per {col}",
             ["Tutti"] + [str(v) for v in unique_vals]
