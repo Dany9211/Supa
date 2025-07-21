@@ -4,7 +4,7 @@ import pandas as pd
 
 st.title("Filtro Completo Matches")
 
-# Funzione connessione al database
+# Connessione al database
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
@@ -24,26 +24,26 @@ st.write(f"**Righe totali:** {len(df)}")
 
 filters = {}
 
-# Creiamo un filtro per ogni colonna
 for col in df.columns:
-    if col.lower() == "id":  # ignora ID
+    if col.lower() == "id":  # Ignora ID
         continue
 
-    # Tenta di convertire in numerico (se possibile)
-    try:
-        df[col] = df[col].astype(str).str.replace(",", ".")
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    except:
-        pass
+    # Verifica se la colonna è numerica o contiene valori numerici
+    col_temp = df[col].astype(str).str.replace(",", ".")
+    numeric_check = pd.to_numeric(col_temp, errors="coerce")
 
-    if pd.api.types.is_numeric_dtype(df[col]):
-        min_val = float(df[col].min())
-        max_val = float(df[col].max())
-        selected_range = st.slider(
-            f"Filtro per {col}",
-            min_val, max_val, (min_val, max_val), step=0.01
-        )
-        filters[col] = selected_range
+    if numeric_check.notnull().sum() > 0:  # Se almeno qualche valore è numerico
+        df[col] = numeric_check
+        min_val = float(df[col].min(skipna=True))
+        max_val = float(df[col].max(skipna=True))
+        if pd.notna(min_val) and pd.notna(max_val):
+            selected_range = st.slider(
+                f"Filtro per {col}",
+                float(min_val), float(max_val),
+                (float(min_val), float(max_val)),
+                step=0.01
+            )
+            filters[col] = selected_range
     else:
         unique_vals = df[col].dropna().unique().tolist()
         if len(unique_vals) > 0:
@@ -54,11 +54,13 @@ for col in df.columns:
             if selected_val != "Tutti":
                 filters[col] = selected_val
 
-# Applica i filtri
+# Applica filtri
 filtered_df = df.copy()
 for col, val in filters.items():
     if isinstance(val, tuple):
-        filtered_df = filtered_df[(filtered_df[col] >= val[0]) & (filtered_df[col] <= val[1])]
+        filtered_df = filtered_df[
+            (filtered_df[col] >= val[0]) & (filtered_df[col] <= val[1])
+        ]
     else:
         filtered_df = filtered_df[filtered_df[col].astype(str) == val]
 
