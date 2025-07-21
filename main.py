@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches + Winrate & ROI 1X2 (DEBUG)")
+st.title("Filtro Completo Matches + Winrate & ROI 1X2")
 
 # Funzione di connessione al DB
 def run_query(query):
@@ -23,24 +23,6 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
-# Debug: mostra TUTTI i valori unici grezzi
-st.write("### Valori unici ORIGINALI gol_home_ft:")
-st.write(sorted(df["gol_home_ft"].astype(str).unique().tolist()))
-
-st.write("### Valori unici ORIGINALI gol_away_ft:")
-st.write(sorted(df["gol_away_ft"].astype(str).unique().tolist()))
-
-# Pulizia avanzata (conversione a interi)
-df["gol_home_ft"] = pd.to_numeric(df["gol_home_ft"].astype(str).str.strip(), errors="coerce").fillna(0).astype(int)
-df["gol_away_ft"] = pd.to_numeric(df["gol_away_ft"].astype(str).str.strip(), errors="coerce").fillna(0).astype(int)
-
-# Debug: mostra TUTTI i valori unici puliti
-st.write("### Valori unici PULITI gol_home_ft:")
-st.write(sorted(df["gol_home_ft"].unique().tolist()))
-
-st.write("### Valori unici PULITI gol_away_ft:")
-st.write(sorted(df["gol_away_ft"].unique().tolist()))
-
 # Calcola esito (1/X/2)
 def determina_esito(row):
     if row["gol_home_ft"] > row["gol_away_ft"]:
@@ -54,7 +36,7 @@ df["esito"] = df.apply(determina_esito, axis=1)
 
 filters = {}
 
-# Colonne gol con menu a tendina
+# Colonne gol da filtrare con menu a tendina
 gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
 for col in df.columns:
@@ -63,7 +45,10 @@ for col in df.columns:
         continue
 
     if col in gol_columns_dropdown:
+        # Pulizia valori: int, no duplicati
         unique_vals = sorted(set(pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)))
+        if 0 not in unique_vals:
+            unique_vals = [0] + unique_vals
         selected_val = st.selectbox(
             f"Filtra per {col}",
             ["Tutti"] + [str(v) for v in unique_vals]
@@ -71,6 +56,7 @@ for col in df.columns:
         if selected_val != "Tutti":
             filters[col] = int(selected_val)
     else:
+        # Slider per numerici
         col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
         if col_temp.notnull().sum() > 0:
             min_val = col_temp.min(skipna=True)
@@ -85,6 +71,7 @@ for col in df.columns:
                 )
                 filters[col] = (selected_range, col_temp)
         else:
+            # Menu a tendina per testuali
             unique_vals = df[col].dropna().unique().tolist()
             if len(unique_vals) > 0:
                 selected_val = st.selectbox(
