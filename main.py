@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (filtri ottimizzati) + Risultati Esatti")
+st.title("Filtro Completo Matches (filtri ottimizzati) + Risultato FT")
 
 # Funzione di connessione
 def run_query(query):
@@ -23,6 +23,14 @@ def run_query(query):
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
+# Creiamo la nuova colonna "risultato_ft"
+if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
+    df.insert(
+        loc=df.columns.get_loc("away_team") + 1,
+        column="risultato_ft",
+        value=df["gol_home_ft"].astype(str) + "-" + df["gol_away_ft"].astype(str)
+    )
+
 filters = {}
 
 # Colonne gol con menu a tendina
@@ -30,8 +38,7 @@ gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_h
 
 for col in df.columns:
     # Escludiamo colonne indesiderate
-    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
-       any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
+    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
     if col in gol_columns_dropdown:
@@ -79,20 +86,3 @@ for col, val in filters.items():
 st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
-
-# --- Distribuzione risultati esatti ---
-if not filtered_df.empty:
-    st.subheader("Distribuzione Risultati Esatti (FT)")
-    filtered_df["risultato_esatto"] = filtered_df["gol_home_ft"].astype(str) + "-" + filtered_df["gol_away_ft"].astype(str)
-    
-    distribuzione = (
-        filtered_df["risultato_esatto"]
-        .value_counts()
-        .reset_index()
-        .rename(columns={"index": "Risultato Esatto", "risultato_esatto": "Conteggio"})
-    )
-    distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
-    
-    st.table(distribuzione)
-else:
-    st.warning("Nessuna partita trovata con i filtri selezionati.")
