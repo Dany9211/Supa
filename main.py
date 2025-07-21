@@ -91,7 +91,7 @@ st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
 
-# Distribuzione Risultati FT/HT
+# Funzione per distribuzione FT/HT
 def mostra_distribuzione(df, col_risultato, titolo):
     risultati_interessanti = [
         "0-0", "0-1", "0-2", "0-3",
@@ -139,13 +139,13 @@ if not filtered_df.empty:
     mostra_distribuzione(filtered_df, "risultato_ft", "Risultati Finali (FT)")
     mostra_distribuzione(filtered_df, "risultato_ht", "Risultati Primo Tempo (HT)")
 
-# FIRST TO SCORE
+# FIRST TO SCORE - ignorando partite senza gol
 if not filtered_df.empty and "primo_gol_home" in filtered_df.columns and "primo_gol_away" in filtered_df.columns:
     def first_to_score(row):
         home_goal = row["primo_gol_home"]
         away_goal = row["primo_gol_away"]
         if pd.isnull(home_goal) and pd.isnull(away_goal):
-            return "Nessun Gol"
+            return np.nan  # ignora se entrambi vuoti
         if pd.isnull(home_goal):
             return "Away"
         if pd.isnull(away_goal):
@@ -153,8 +153,9 @@ if not filtered_df.empty and "primo_gol_home" in filtered_df.columns and "primo_
         return "Home" if home_goal < away_goal else "Away"
 
     filtered_df["first_to_score"] = filtered_df.apply(first_to_score, axis=1)
-    st.subheader("Distribuzione First To Score")
-    first_counts = filtered_df["first_to_score"].value_counts().reset_index()
+    filtered_ft = filtered_df.dropna(subset=["first_to_score"])
+    st.subheader("Distribuzione First To Score (solo partite con almeno un gol)")
+    first_counts = filtered_ft["first_to_score"].value_counts().reset_index()
     first_counts.columns = ["First To Score", "Conteggio"]
-    first_counts["Percentuale %"] = (first_counts["Conteggio"] / len(filtered_df) * 100).round(2)
+    first_counts["Percentuale %"] = (first_counts["Conteggio"] / len(filtered_ft) * 100).round(2)
     st.table(first_counts)
