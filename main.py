@@ -3,9 +3,10 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.title("Filtro Completo Matches (filtri ottimizzati) + Risultato FT")
+st.title("Filtro Completo Matches (filtri ottimizzati)")
 
-# Funzione di connessione
+# Connessione al database
+@st.cache_data(allow_output_mutation=True)
 def run_query(query):
     conn = psycopg2.connect(
         host=st.secrets["postgres"]["host"],
@@ -19,100 +20,92 @@ def run_query(query):
     conn.close()
     return df
 
-# Carica dataset
 df = run_query('SELECT * FROM "Matches";')
 st.write(f"**Righe totali nel dataset:** {len(df)}")
 
-# Creiamo la colonna "risultato_ft"
-if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
-    df.insert(
-        loc=df.columns.get_loc("away_team") + 1,
-        column="risultato_ft",
-        value=df["gol_home_ft"].astype(str) + "-" + df["gol_away_ft"].astype(str)
-    )
-
-filters = {}
-
-# Colonne gol con menu a tendina
-gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
-
-for col in df.columns:
-    # Escludiamo colonne indesiderate
-    if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
-       any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
-        continue
-
-    if col in gol_columns_dropdown:
-        unique_vals = sorted(df[col].dropna().unique().tolist())
-        if 0 not in unique_vals:
-            unique_vals = [0] + unique_vals
-        selected_val = st.selectbox(f"Filtra per {col}", ["Tutti"] + [str(v) for v in unique_vals])
-        if selected_val != "Tutti":
-            filters[col] = int(selected_val)
-    else:
-        # Se numerica, slider
-        col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
-        if col_temp.notnull().sum() > 0:
-            min_val = col_temp.min(skipna=True)
-            max_val = col_temp.max(skipna=True)
-            if pd.notna(min_val) and pd.notna(max_val):
-                step_val = 0.01
-                selected_range = st.slider(
-                    f"Filtro per {col}",
-                    float(min_val), float(max_val),
-                    (float(min_val), float(max_val)),
-                    step=step_val
-                )
-                filters[col] = (selected_range, col_temp)
-        else:
-            unique_vals = df[col].dropna().unique().tolist()
-            if len(unique_vals) > 0:
-                selected_val = st.selectbox(
-                    f"Filtra per {col} (opzionale)",
-                    ["Tutti"] + [str(v) for v in unique_vals]
-                )
-                if selected_val != "Tutti":
-                    filters[col] = selected_val
-
-# Applica i filtri
-filtered_df = df.copy()
-for col, val in filters.items():
-    if isinstance(val, tuple):
-        range_vals, col_temp = val
-        mask = (col_temp >= range_vals[0]) & (col_temp <= range_vals[1])
-        filtered_df = filtered_df[mask.fillna(True)]
-    else:
-        filtered_df = filtered_df[filtered_df[col].astype(str) == str(val)]
-
-st.subheader("Dati Filtrati")
-st.dataframe(filtered_df)
-st.write(f"**Righe visualizzate:** {len(filtered_df)}")
-
-# Lista dei risultati che vogliamo mostrare
-risultati_interessanti = [
-    "0-0", "0-1", "0-2", "0-3",
-    "1-0", "1-1", "1-2", "1-3",
-    "2-0", "2-1", "2-2", "2-3",
-    "3-0", "3-1", "3-2", "3-3"
-]
-
-# Aggiungiamo categorie "Altro risultato casa vince", "Altro risultato ospite vince", "Altro pareggio"
-def classifica_risultato(ris):
-    home, away = map(int, ris.split("-"))
-    if ris in risultati_interessanti:
-        return ris
-    if home > away:
+# Aggiungi colonna risultato_ft
+def format_risultato(rh, ra):
+    combo = f"{int(rh)}-{int(ra)}"
+    allowed = ["0-0","0-1","0-2","0-3","1-0","1-1","1-2","1-3",
+               "2-0","2-1","2-2","2-3","3-0","3-1","3-2","3-3"]
+    if combo in allowed:
+        return combo
+    if rh > ra:
         return "Altro risultato casa vince"
-    elif home < away:
+    elif rh < ra:
         return "Altro risultato ospite vince"
     else:
         return "Altro pareggio"
 
-if not filtered_df.empty:
-    filtered_df["risultato_classificato"] = filtered_df["risultato_ft"].apply(classifica_risultato)
+df["risultato_ft"] = df.apply(lambda r: format_risultato(r["gol_home_ft"], r["gol_away_ft"]), axis=1)
 
-    st.subheader("Distribuzione Risultati Esatti (FT)")
-    distribuzione = filtered_df["risultato_classificato"].value_counts().reset_index()
-    distribuzione.columns = ["Risultato FT", "Conteggio"]
-    distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(filtered_df) * 100).round(2)
-    st.table(distribuzione)
+# Impostazione filtri
+filters = {}
+dropdown_cols = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
+
+for col in df.columns:
+    if col.lower() in ["id","data"] or "minutaggio" in col.lower() or any(x in col.lower() for x in ["primo","secondo","terzo","quarto","quinto"]):
+        continue
+    if col in dropdown_cols:
+        vals = sorted(df[col].dropna().unique().astype(int))
+        if 0 not in vals:
+            vals = [0] + vals
+        sel = st.selectbox(f"Filtra per {col}", ["Tutti"] + [str(v) for v in vals])
+        if sel != "Tutti":
+            filters[col] = int(sel)
+    else:
+        tmp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
+        if tmp.notnull().sum() > 0:
+            vmin, vmax = tmp.min(), tmp.max()
+            sel_range = st.slider(f"Filtro per {col}", float(vmin), float(vmax), (float(vmin), float(vmax)), step=0.01)
+            filters[col] = sel_range
+        else:
+            opts = df[col].dropna().unique().tolist()
+            sel = st.selectbox(f"{col} (opzionale)", ["Tutti"] + [str(x) for x in opts])
+            if sel != "Tutti":
+                filters[col] = sel
+
+filtered = df.copy()
+for col, val in filters.items():
+    if isinstance(val, tuple):
+        low, high = val
+        tmp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
+        filtered = filtered[(tmp >= low) & (tmp <= high)]
+    else:
+        filtered = filtered[filtered[col].astype(str) == str(val)]
+
+st.subheader("Dati Filtrati")
+st.dataframe(filtered)
+st.write(f"**Righe visualizzate:** {len(filtered)}")
+
+# Distribuzione risultati esatti
+allowed = ["0-0","0-1","0-2","0-3","1-0","1-1","1-2","1-3","2-0","2-1","2-2","2-3","3-0","3-1","3-2","3-3",
+           "Altro risultato casa vince","Altro pareggio","Altro risultato ospite vince"]
+dist = filtered["risultato_ft"].value_counts().reindex(allowed, fill_value=0).reset_index()
+dist.columns = ["Risultato", "Conteggio"]
+dist["Percentuale %"] = (dist["Conteggio"] / len(filtered) * 100).round(2)
+st.subheader("Distribuzione Risultati Esatti")
+st.dataframe(dist)
+
+# Calcolo WinRate e ROI 1×2
+filtered["esito"] = filtered.apply(lambda r: "1" if r["gol_home_ft"]>r["gol_away_ft"] 
+                                   else ("2" if r["gol_home_ft"]<r["gol_away_ft"] else "X"), axis=1)
+n = len(filtered)
+esiti = filtered["esito"].value_counts().reindex(["1","X","2"], fill_value=0)
+winrate = (esiti / n *100).round(2)
+
+# Profit (stake 1%) e ROI%
+profit = {
+    e: (esiti[e] * (filtered.loc[filtered["esito"]==e, f"odd_{e}"].mean() - 1) - (n - esiti[e])) * 0.01
+    for e in ["1","X","2"]
+}
+roi = {e: round(profit[e] / (n*0.01) * 100, 2) for e in profit}
+
+summary = pd.DataFrame({
+    "N. Bets": esiti,
+    "WinRate %": winrate,
+    "Profit (1%)": [round(profit[e],2) for e in ["1","X","2"]],
+    "ROI %": [roi[e] for e in ["1","X","2"]]
+}, index=["Home ⬜", "Pareggio ⚪", "Trasferta ☐"])
+st.subheader("WinRate & ROI (1% stake)")
+st.dataframe(summary)
