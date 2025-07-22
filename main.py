@@ -41,10 +41,10 @@ if "gol_home_ht" in df.columns and "gol_away_ht" in df.columns:
 
 filters = {}
 
-# --- FILTRI (rimuovendo gol_home_ft, gol_away_ft, gol_home_ht, gol_away_ht) ---
+# --- FILTRI (senza colonne gol) ---
 for col in df.columns:
     if col.lower() in ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]:
-        continue  # Non mostrare filtri per i gol
+        continue
     if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
        any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
@@ -85,6 +85,7 @@ for col, val in filters.items():
 st.subheader("Dati Filtrati")
 st.dataframe(filtered_df)
 st.write(f"**Righe visualizzate:** {len(filtered_df)}")
+
 
 # --- FUNZIONE DISTRIBUZIONE & WINRATE ---
 def mostra_distribuzione(df, col_risultato, titolo):
@@ -199,3 +200,38 @@ if not filtered_df.empty:
             st.table(over_ht_df)
         except:
             st.warning("Errore nel calcolo degli Over HT: controlla i dati di risultato_ht.")
+
+    # --- ANALISI RISULTATI FT BASATI SU RISULTATO HT ---
+    if "risultato_ht" in filtered_df.columns:
+        st.subheader("Analisi FT partendo dal Risultato HT")
+        risultati_ht_unici = sorted(filtered_df["risultato_ht"].dropna().unique())
+        risultato_ht_scelto = st.selectbox(
+            "Seleziona un risultato HT",
+            ["Nessuno"] + list(risultati_ht_unici)
+        )
+
+        if risultato_ht_scelto != "Nessuno":
+            subset_df = filtered_df[filtered_df["risultato_ht"] == risultato_ht_scelto]
+            st.write(f"**Partite trovate con HT = {risultato_ht_scelto}: {len(subset_df)}**")
+
+            if not subset_df.empty:
+                # Over FT
+                over_data_subset = []
+                for t in thresholds:
+                    count_over = (subset_df["tot_goals_ft"] > t).sum()
+                    perc_over = round((count_over / len(subset_df)) * 100, 2)
+                    odd_min = round(100 / perc_over, 2) if perc_over > 0 else "-"
+                    over_data_subset.append([f"Over FT {t}", count_over, perc_over, odd_min])
+                over_df_subset = pd.DataFrame(over_data_subset, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
+                st.subheader(f"Over Goals FT (partendo da HT = {risultato_ht_scelto})")
+                st.table(over_df_subset)
+
+                # Distribuzione FT
+                distribuzione_ft_subset = subset_df["risultato_ft"].value_counts().reset_index()
+                distribuzione_ft_subset.columns = ["Risultato FT", "Conteggio"]
+                distribuzione_ft_subset["Percentuale %"] = (distribuzione_ft_subset["Conteggio"] / len(subset_df) * 100).round(2)
+                distribuzione_ft_subset["Odd Minima"] = distribuzione_ft_subset["Percentuale %"].apply(
+                    lambda x: round(100/x, 2) if x > 0 else "-"
+                )
+                st.subheader(f"Distribuzione Risultati Finali (partendo da HT = {risultato_ht_scelto})")
+                st.table(distribuzione_ft_subset)
