@@ -40,44 +40,37 @@ if "gol_home_ht" in df.columns and "gol_away_ht" in df.columns:
     )
 
 filters = {}
-gol_columns_dropdown = ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]
 
-# --- FILTRI ---
+# --- FILTRI (senza gol_home_ft, gol_away_ft, gol_home_ht, gol_away_ht) ---
 for col in df.columns:
+    if col.lower() in ["gol_home_ft", "gol_away_ft", "gol_home_ht", "gol_away_ht"]:
+        continue  # Skip colonne gol
     if col.lower() == "id" or "minutaggio" in col.lower() or col.lower() == "data" or \
        any(keyword in col.lower() for keyword in ["primo", "secondo", "terzo", "quarto", "quinto"]):
         continue
 
-    if col in gol_columns_dropdown:
-        unique_vals = sorted(df[col].dropna().unique().tolist())
-        if 0 not in unique_vals:
-            unique_vals = [0] + unique_vals
-        selected_val = st.selectbox(f"Filtra per {col}", ["Tutti"] + [str(v) for v in unique_vals])
-        if selected_val != "Tutti":
-            filters[col] = int(selected_val)
+    col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
+    if col_temp.notnull().sum() > 0:
+        min_val = col_temp.min(skipna=True)
+        max_val = col_temp.max(skipna=True)
+        if pd.notna(min_val) and pd.notna(max_val):
+            step_val = 0.01
+            selected_range = st.slider(
+                f"Filtro per {col}",
+                float(min_val), float(max_val),
+                (float(min_val), float(max_val)),
+                step=step_val
+            )
+            filters[col] = (selected_range, col_temp)
     else:
-        col_temp = pd.to_numeric(df[col].astype(str).str.replace(",", "."), errors="coerce")
-        if col_temp.notnull().sum() > 0:
-            min_val = col_temp.min(skipna=True)
-            max_val = col_temp.max(skipna=True)
-            if pd.notna(min_val) and pd.notna(max_val):
-                step_val = 0.01
-                selected_range = st.slider(
-                    f"Filtro per {col}",
-                    float(min_val), float(max_val),
-                    (float(min_val), float(max_val)),
-                    step=step_val
-                )
-                filters[col] = (selected_range, col_temp)
-        else:
-            unique_vals = df[col].dropna().unique().tolist()
-            if len(unique_vals) > 0:
-                selected_val = st.selectbox(
-                    f"Filtra per {col} (opzionale)",
-                    ["Tutti"] + [str(v) for v in unique_vals]
-                )
-                if selected_val != "Tutti":
-                    filters[col] = selected_val
+        unique_vals = df[col].dropna().unique().tolist()
+        if len(unique_vals) > 0:
+            selected_val = st.selectbox(
+                f"Filtra per {col} (opzionale)",
+                ["Tutti"] + [str(v) for v in unique_vals]
+            )
+            if selected_val != "Tutti":
+                filters[col] = selected_val
 
 # --- APPLICA FILTRI ---
 filtered_df = df.copy()
