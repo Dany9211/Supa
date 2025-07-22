@@ -153,9 +153,14 @@ if not filtered_df.empty:
     mostra_distribuzione(filtered_df, "risultato_ft", "Risultati Finali (FT)")
     mostra_distribuzione(filtered_df, "risultato_ht", "Risultati Primo Tempo (HT)")
 
+
 # --- CALCOLO BTTS & OVER GOALS ---
 if not filtered_df.empty:
-    temp_ft = filtered_df["risultato_ft"].str.split("-", expand=True).astype(int)
+    # --- FT ---
+    temp_ft = filtered_df["risultato_ft"].str.split("-", expand=True)
+    temp_ft = temp_ft.replace("", np.nan).dropna()
+    temp_ft = temp_ft.astype(int)
+
     filtered_df["home_g_ft"] = temp_ft[0]
     filtered_df["away_g_ft"] = temp_ft[1]
     filtered_df["tot_goals_ft"] = filtered_df["home_g_ft"] + filtered_df["away_g_ft"]
@@ -166,11 +171,12 @@ if not filtered_df.empty:
     btts_count = len(filtered_df[(filtered_df["home_g_ft"] > 0) & (filtered_df["away_g_ft"] > 0)])
     perc_btts = round(btts_count / total_games * 100, 2) if total_games > 0 else 0
     odd_btts = round(100 / perc_btts, 2) if perc_btts > 0 else "-"
-    btts_df = pd.DataFrame([[btts_count, perc_btts, odd_btts]], columns=["Conteggio", "Percentuale %", "Odd Minima"])
     st.subheader("BTTS (Both Teams To Score)")
-    st.table(btts_df)
+    st.write(f"Partite BTTS SI: {btts_count}")
+    st.write(f"Percentuale BTTS SI: {perc_btts}%")
+    st.write(f"Odd Minima: {odd_btts}")
 
-    # Over Goals FT
+    # Over FT
     thresholds = [0.5, 1.5, 2.5, 3.5, 4.5]
     over_data = []
     for t in thresholds:
@@ -182,18 +188,24 @@ if not filtered_df.empty:
     st.subheader("Over Goals (FT)")
     st.table(over_df)
 
-    # Over Goals HT
-    temp_ht = filtered_df["risultato_ht"].str.split("-", expand=True).astype(int)
-    filtered_df["home_g_ht"] = temp_ht[0]
-    filtered_df["away_g_ht"] = temp_ht[1]
-    filtered_df["tot_goals_ht"] = filtered_df["home_g_ht"] + filtered_df["away_g_ht"]
+    # --- HT ---
+    if "risultato_ht" in filtered_df.columns:
+        temp_ht = filtered_df["risultato_ht"].str.split("-", expand=True)
+        temp_ht = temp_ht.replace("", np.nan).dropna()
+        try:
+            temp_ht = temp_ht.astype(int)
+            filtered_df["home_g_ht"] = temp_ht[0]
+            filtered_df["away_g_ht"] = temp_ht[1]
+            filtered_df["tot_goals_ht"] = filtered_df["home_g_ht"] + filtered_df["away_g_ht"]
 
-    over_ht_data = []
-    for t in thresholds:
-        count_over_ht = (filtered_df["tot_goals_ht"] > t).sum()
-        perc_over_ht = round(count_over_ht / total_games * 100, 2) if total_games > 0 else 0
-        odd_min_ht = round(100 / perc_over_ht, 2) if perc_over_ht > 0 else "-"
-        over_ht_data.append([f"Over HT {t}", count_over_ht, perc_over_ht, odd_min_ht])
-    over_ht_df = pd.DataFrame(over_ht_data, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
-    st.subheader("Over Goals (HT)")
-    st.table(over_ht_df)
+            over_ht_data = []
+            for t in thresholds:
+                count_over_ht = (filtered_df["tot_goals_ht"] > t).sum()
+                perc_over_ht = round(count_over_ht / total_games * 100, 2) if total_games > 0 else 0
+                odd_min_ht = round(100 / perc_over_ht, 2) if perc_over_ht > 0 else "-"
+                over_ht_data.append([f"Over HT {t}", count_over_ht, perc_over_ht, odd_min_ht])
+            over_ht_df = pd.DataFrame(over_ht_data, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
+            st.subheader("Over Goals (HT)")
+            st.table(over_ht_df)
+        except:
+            st.warning("Errore nel calcolo degli Over HT: controlla i dati di risultato_ht.")
