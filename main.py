@@ -3,10 +3,10 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="Analisi ROI Label Odds", layout="wide")
-st.title("Analisi ROI per Label Odds (Back & Lay)")
+st.set_page_config(page_title="ROI Label Odds", layout="wide")
+st.title("Analisi ROI per Label Odds")
 
-# --- Funzione connessione ---
+# --- Connessione DB ---
 @st.cache_data
 def run_query(query: str):
     conn = psycopg2.connect(
@@ -21,22 +21,20 @@ def run_query(query: str):
     conn.close()
     return df
 
-# --- Caricamento dati ---
 try:
     df = run_query('SELECT * FROM "allcamp";')
     st.write(f"**Righe iniziali nel dataset:** {len(df)}")
 except Exception as e:
-    st.error(f"Errore durante il caricamento: {e}")
+    st.error(f"Errore caricamento dati: {e}")
     st.stop()
 
-# --- Label Odds ---
+# --- Aggiungo Label Odds ---
 def assegna_label_odds(row):
     try:
         oh = float(str(row["odd_home"]).replace(",", "."))
         oa = float(str(row["odd_away"]).replace(",", "."))
     except:
         return "N/A"
-
     if oh <= 1.5:
         return "Home strong fav"
     elif 1.51 <= oh <= 2.0:
@@ -55,21 +53,15 @@ def assegna_label_odds(row):
 
 df["label_odds"] = df.apply(assegna_label_odds, axis=1)
 
-# --- FILTRI ---
+# --- Filtri Sidebar ---
 labels = sorted(df["label_odds"].dropna().unique())
 selected_label = st.sidebar.selectbox("Seleziona Label Odds", labels)
 
-if "league" in df.columns:
-    leagues = ["Tutte"] + sorted(df["league"].dropna().unique())
-    selected_league = st.sidebar.selectbox("Seleziona League", leagues)
-else:
-    selected_league = "Tutte"
+leagues = ["Tutte"] + sorted(df["league"].dropna().unique())
+selected_league = st.sidebar.selectbox("Seleziona League", leagues)
 
-if "anno" in df.columns:
-    anni = ["Tutti"] + sorted(df["anno"].dropna().unique())
-    selected_anno = st.sidebar.selectbox("Seleziona Anno", anni)
-else:
-    selected_anno = "Tutti"
+anni = ["Tutti"] + sorted(df["anno"].dropna().unique())
+selected_anno = st.sidebar.selectbox("Seleziona Anno", anni)
 
 # Filtri dinamici squadre
 if selected_league != "Tutte":
@@ -82,30 +74,25 @@ else:
 selected_home = st.sidebar.selectbox("Seleziona Home Team", squadre_home)
 selected_away = st.sidebar.selectbox("Seleziona Away Team", squadre_away)
 
-# --- APPLICA FILTRI ---
-filtered_df = df.copy()
-filtered_df = filtered_df[filtered_df["label_odds"] == selected_label]
-
+# --- Applica Filtri ---
+filtered_df = df[df["label_odds"] == selected_label]
 if selected_league != "Tutte":
     filtered_df = filtered_df[filtered_df["league"] == selected_league]
-
 if selected_anno != "Tutti":
     filtered_df = filtered_df[filtered_df["anno"] == selected_anno]
-
 if selected_home != "Tutte":
     filtered_df = filtered_df[filtered_df["home_team"] == selected_home]
-
 if selected_away != "Tutte":
     filtered_df = filtered_df[filtered_df["away_team"] == selected_away]
 
 st.subheader("Dati filtrati")
 st.write(f"**Partite trovate:** {len(filtered_df)}")
 
-# --- Funzione Calcolo ROI ---
+# --- Calcolo ROI ---
 def calcola_roi(matches_df, segno):
     if matches_df.empty:
-        return {"Matches": 0, "Win%": 0, "OddMin": "-", "BackPts": 0, "ROI Back %": 0, "LayPts": 0, "ROI Lay %": 0}
-
+        return {"Matches": 0, "Win %": 0, "Odd Min": "-", "Back Pts": 0, "ROI Back %": 0, "Lay Pts": 0, "ROI Lay %": 0}
+    
     profitti_back, profitti_lay = [], []
     win = 0
 
@@ -145,9 +132,9 @@ def calcola_roi(matches_df, segno):
     roi_lay = round((lay_pts / matches) * 100, 2) if matches > 0 else 0
     odd_min = round(100 / winrate, 2) if winrate > 0 else "-"
 
-    return {"Matches": matches, "Win%": winrate, "OddMin": odd_min, "BackPts": back_pts, "ROI Back %": roi_back, "LayPts": lay_pts, "ROI Lay %": roi_lay}
+    return {"Matches": matches, "Win %": winrate, "Odd Min": odd_min, "Back Pts": back_pts, "ROI Back %": roi_back, "Lay Pts": lay_pts, "ROI Lay %": roi_lay}
 
-# --- Tabella ROI per 1, X, 2 ---
+# --- Tabella ROI 1/X/2 ---
 roi_results = []
 for segno in ["HOME", "DRAW", "AWAY"]:
     roi_results.append([segno] + list(calcola_roi(filtered_df, segno).values()))
