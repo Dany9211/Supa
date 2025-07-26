@@ -3,8 +3,8 @@ import psycopg2
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="Analisi ROI Label Odds", layout="wide")
-st.title("Analisi ROI per Label Odds (Back & Lay) + Statistiche Squadre")
+st.set_page_config(page_title="Analisi ROI & Statistiche Squadre", layout="wide")
+st.title("Analisi ROI e Statistiche per Label Odds e Squadre")
 
 # --- Funzione connessione ---
 @st.cache_data
@@ -62,21 +62,32 @@ selected_label = st.sidebar.selectbox("Seleziona Label Odds", labels)
 if "league" in df.columns:
     leagues = ["Tutte"] + sorted(df["league"].dropna().unique())
     selected_league = st.sidebar.selectbox("Seleziona League", leagues)
+else:
+    selected_league = "Tutte"
 
 if "anno" in df.columns:
     anni = ["Tutti"] + sorted(df["anno"].dropna().unique())
     selected_anno = st.sidebar.selectbox("Seleziona Anno", anni)
+else:
+    selected_anno = "Tutti"
 
 if "home_team" in df.columns:
-    teams_home = ["Tutte"] + sorted(df[df["league"] == selected_league]["home_team"].dropna().unique() if selected_league != "Tutte" else df["home_team"].dropna().unique())
-    selected_home = st.sidebar.selectbox("Seleziona Home Team", teams_home)
+    home_teams = ["Tutte"] + sorted(df["home_team"].dropna().unique())
+    selected_home = st.sidebar.selectbox("Seleziona Home Team", home_teams)
+else:
+    selected_home = "Tutte"
 
 if "away_team" in df.columns:
-    teams_away = ["Tutte"] + sorted(df[df["league"] == selected_league]["away_team"].dropna().unique() if selected_league != "Tutte" else df["away_team"].dropna().unique())
-    selected_away = st.sidebar.selectbox("Seleziona Away Team", teams_away)
+    away_teams = ["Tutte"] + sorted(df["away_team"].dropna().unique())
+    selected_away = st.sidebar.selectbox("Seleziona Away Team", away_teams)
+else:
+    selected_away = "Tutte"
 
 # --- APPLICA FILTRI ---
-filtered_df = df[df["label_odds"] == selected_label].copy()
+filtered_df = df.copy()
+
+if selected_label:
+    filtered_df = filtered_df[filtered_df["label_odds"] == selected_label]
 
 if selected_league != "Tutte":
     filtered_df = filtered_df[filtered_df["league"] == selected_league]
@@ -84,14 +95,15 @@ if selected_league != "Tutte":
 if selected_anno != "Tutti":
     filtered_df = filtered_df[filtered_df["anno"] == selected_anno]
 
-# --- Funzione ROI (Back & Lay) ---
+# --- Funzione Calcolo ROI (Back e Lay) ---
 def calcola_roi(matches_df, segno):
     if matches_df.empty:
-        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI%": 0, "OddMin": "-"}
+        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI%": 0, "Odd Minima": "-"}
 
     risultati = matches_df.copy()
     risultati["back_profit"] = 0.0
     risultati["lay_profit"] = 0.0
+    total_stake = len(risultati)  # 1% per match, quindi totale = n matches
 
     for i, row in risultati.iterrows():
         home_g = int(row.get("gol_home_ft", 0))
@@ -110,9 +122,7 @@ def calcola_roi(matches_df, segno):
             vinta = home_g < away_g
             odd = odd_away
 
-        # BACK
         risultati.at[i, "back_profit"] = (odd - 1) if vinta else -1
-        # LAY
         risultati.at[i, "lay_profit"] = - (odd - 1) if vinta else 1
 
     matches = len(risultati)
@@ -122,39 +132,31 @@ def calcola_roi(matches_df, segno):
     roi = round((back_pts / matches) * 100, 2) if matches > 0 else 0
     odd_min = round(100 / winrate, 2) if winrate > 0 else "-"
 
-    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI%": roi, "OddMin": odd_min}
+    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI%": roi, "Odd Minima": odd_min}
 
-# --- Prospetto Back & Lay ---
-league_results = []
-for segno in ["HOME", "DRAW", "AWAY"]:
-    league_results.append(
-        ["League", segno] + list(calcola_roi(filtered_df, segno).values())
-    )
+# --- Tabella ROI per Label e Squadre ---
+def genera_tabella_roi(df_input, label_name):
+    table = []
+    for segno in ["HOME", "DRAW", "AWAY"]:
+        table.append([label_name, segno] + list(calcola_roi(df_input, segno).values()))
+    return table
 
-# Squadra Home
+results_table = genera_tabella_roi(filtered_df, selected_label)
+
+# --- Squadre selezionate (media tra Home e Away) ---
+squadre_matches = pd.DataFrame()
 if selected_home != "Tutte":
-    if "Home" in selected_label:
-        home_matches = filtered_df[filtered_df["home_team"] == selected_home]
-    else:
-        home_matches = filtered_df[filtered_df["away_team"] == selected_home]
-    for segno in ["HOME", "DRAW", "AWAY"]:
-        league_results.append(
-            [selected_home, segno] + list(calcola_roi(home_matches, segno).values())
-        )
-
-# Squadra Away
+    squadre_matches = pd.concat([squadre_matches, filtered_df[filtered_df["home_team"] == selected_home]])
 if selected_away != "Tutte":
-    if "Away" in selected_label:
-        away_matches = filtered_df[filtered_df["away_team"] == selected_away]
-    else:
-        away_matches = filtered_df[filtered_df["home_team"] == selected_away]
-    for segno in ["HOME", "DRAW", "AWAY"]:
-        league_results.append(
-            [selected_away, segno] + list(calcola_roi(away_matches, segno).values())
-        )
+    squadre_matches = pd.concat([squadre_matches, filtered_df[filtered_df["away_team"] == selected_away]])
 
-results_df = pd.DataFrame(league_results, columns=["LABEL", "SEGNO", "Matches", "Win %", "Back Pts", "Lay Pts", "ROI%", "Odd Min"])
+if not squadre_matches.empty:
+    squadre_results = genera_tabella_roi(squadre_matches, f"{selected_home} & {selected_away}")
+    results_table.extend(squadre_results)
 
+results_df = pd.DataFrame(results_table, columns=["LABEL", "SEGNO", "Matches", "Win%", "Back Pts", "Lay Pts", "ROI%", "Odd Minima"])
+
+# --- Colorazione ROI positivi ---
 def color_rois(val):
     if isinstance(val, (int, float)) and val > 0:
         return 'background-color: #b6e8b6'
@@ -163,59 +165,36 @@ def color_rois(val):
 st.subheader(f"Risultati ROI per {selected_label}")
 st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
 
-# --- Statistiche HT/FT ---
-def mostra_statistiche_team(matches_df, squadra):
-    if matches_df.empty:
-        st.warning(f"Nessuna partita trovata per {squadra}.")
-        return
+# --- STATISTICHE EXTRA ---
+def calcola_statistiche(df_stats):
+    if df_stats.empty:
+        return pd.DataFrame()
+    stats = {}
+    temp_ht = df_stats["risultato_ht"].str.split("-", expand=True).apply(pd.to_numeric, errors="coerce").fillna(0)
+    df_stats["tot_goals_ht"] = temp_ht[0] + temp_ht[1]
 
-    st.markdown(f"### Statistiche per {squadra} ({len(matches_df)} partite)")
-    matches_df["risultato_ht"] = matches_df["gol_home_ht"].astype(str) + "-" + matches_df["gol_away_ht"].astype(str)
-    matches_df["risultato_ft"] = matches_df["gol_home_ft"].astype(str) + "-" + matches_df["gol_away_ft"].astype(str)
+    temp_ft = df_stats["risultato_ft"].str.split("-", expand=True).apply(pd.to_numeric, errors="coerce").fillna(0)
+    df_stats["tot_goals_ft"] = temp_ft[0] + temp_ft[1]
 
-    def distribuzione_risultati(col):
-        risultati = matches_df[col].value_counts().reset_index()
-        risultati.columns = ["Risultato", "Conteggio"]
-        risultati["%"] = round((risultati["Conteggio"] / len(matches_df)) * 100, 2)
-        risultati["Odd Minima"] = risultati["%"].apply(lambda x: round(100/x, 2) if x > 0 else "-")
-        return risultati
+    stats["Over HT"] = [(f"Over {t} HT", (df_stats["tot_goals_ht"] > t).sum(),
+                         round((df_stats["tot_goals_ht"] > t).mean() * 100, 2),
+                         round(100 / ((df_stats["tot_goals_ht"] > t).mean() * 100), 2) if (df_stats["tot_goals_ht"] > t).mean() > 0 else "-")
+                        for t in [0.5, 1.5, 2.5]]
 
-    st.write("**Risultati Esatti HT**")
-    st.table(distribuzione_risultati("risultato_ht"))
+    stats["Over FT"] = [(f"Over {t} FT", (df_stats["tot_goals_ft"] > t).sum(),
+                         round((df_stats["tot_goals_ft"] > t).mean() * 100, 2),
+                         round(100 / ((df_stats["tot_goals_ft"] > t).mean() * 100), 2) if (df_stats["tot_goals_ft"] > t).mean() > 0 else "-")
+                        for t in [0.5, 1.5, 2.5, 3.5, 4.5]]
 
-    st.write("**Risultati Esatti FT**")
-    st.table(distribuzione_risultati("risultato_ft"))
+    btts = (df_stats["tot_goals_ft"] > 1).sum()  # entrambe segnano
+    stats["BTTS"] = f"BTTS SI: {btts} ({round(btts / len(df_stats) * 100, 2)}%)"
+    return stats
 
-    # Over/Under HT
-    matches_df["goals_ht"] = matches_df["gol_home_ht"] + matches_df["gol_away_ht"]
-    over_ht = []
-    for t in [0.5, 1.5, 2.5]:
-        c = (matches_df["goals_ht"] > t).sum()
-        p = round((c / len(matches_df)) * 100, 2)
-        over_ht.append([f"Over {t} HT", c, p, round(100/p, 2) if p > 0 else "-"])
-    st.write("**Over Goals HT**")
-    st.table(pd.DataFrame(over_ht, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
-
-    # Over/Under FT
-    matches_df["goals_ft"] = matches_df["gol_home_ft"] + matches_df["gol_away_ft"]
-    over_ft = []
-    for t in [0.5, 1.5, 2.5, 3.5, 4.5]:
-        c = (matches_df["goals_ft"] > t).sum()
-        p = round((c / len(matches_df)) * 100, 2)
-        over_ft.append([f"Over {t} FT", c, p, round(100/p, 2) if p > 0 else "-"])
-    st.write("**Over Goals FT**")
-    st.table(pd.DataFrame(over_ft, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
-
-    # BTTS
-    btts = ((matches_df["gol_home_ft"] > 0) & (matches_df["gol_away_ft"] > 0)).sum()
-    p_btts = round((btts / len(matches_df)) * 100, 2)
-    odd_btts = round(100 / p_btts, 2) if p_btts > 0 else "-"
-    st.write(f"**BTTS SI: {btts} ({p_btts}%) - Odd Minima: {odd_btts}**")
-
-if selected_home != "Tutte":
-    home_matches = filtered_df[filtered_df["home_team"] == selected_home]
-    mostra_statistiche_team(home_matches, selected_home)
-
-if selected_away != "Tutte":
-    away_matches = filtered_df[filtered_df["away_team"] == selected_away]
-    mostra_statistiche_team(away_matches, selected_away)
+if not squadre_matches.empty:
+    st.subheader(f"Statistiche per {selected_home} & {selected_away} ({len(squadre_matches)} partite)")
+    stats = calcola_statistiche(squadre_matches)
+    st.write("**Over HT:**")
+    st.table(pd.DataFrame(stats["Over HT"], columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
+    st.write("**Over FT:**")
+    st.table(pd.DataFrame(stats["Over FT"], columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
+    st.write(stats["BTTS"])
