@@ -73,12 +73,32 @@ if "anno" in df.columns:
     anni = ["Tutti"] + sorted(df["anno"].dropna().unique())
     selected_anno = st.sidebar.selectbox("Seleziona Anno", anni)
 
+# --- FILTRO SQUADRA HOME ---
+if "home_team" in df.columns:
+    if selected_league != "Tutte":
+        home_teams = ["Tutte"] + sorted(df[df["league"] == selected_league]["home_team"].dropna().unique())
+    else:
+        home_teams = ["Tutte"] + sorted(df["home_team"].dropna().unique())
+    selected_home = st.sidebar.selectbox("Seleziona Home Team", home_teams)
+
+# --- FILTRO SQUADRA AWAY ---
+if "away_team" in df.columns:
+    if selected_league != "Tutte":
+        away_teams = ["Tutte"] + sorted(df[df["league"] == selected_league]["away_team"].dropna().unique())
+    else:
+        away_teams = ["Tutte"] + sorted(df["away_team"].dropna().unique())
+    selected_away = st.sidebar.selectbox("Seleziona Away Team", away_teams)
+
 # --- APPLICA FILTRI ---
 filtered_df = df[df["label_odds"] == selected_label].copy()
 if selected_league != "Tutte":
     filtered_df = filtered_df[filtered_df["league"] == selected_league]
 if selected_anno != "Tutti":
     filtered_df = filtered_df[filtered_df["anno"] == selected_anno]
+if selected_home != "Tutte":
+    filtered_df = filtered_df[filtered_df["home_team"] == selected_home]
+if selected_away != "Tutte":
+    filtered_df = filtered_df[filtered_df["away_team"] == selected_away]
 
 # --- Funzione Calcolo ROI (Back e Lay) ---
 def calcola_roi(matches_df, segno):
@@ -153,68 +173,3 @@ if not top10_df.empty:
         if st.button(f"Dettagli: {team}"):
             st.session_state["team_selected"] = team
     st.dataframe(top10_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
-
-# --- DETTAGLI SQUADRA ---
-if "team_selected" in st.session_state:
-    team = st.session_state["team_selected"]
-    st.markdown(f"### Dettagli per **{team}**")
-    team_df = filtered_df[(filtered_df["home_team"] == team) | (filtered_df["away_team"] == team)]
-
-    def mostra_risultati_esatti(df, col_risultato, titolo):
-        risultati_interessanti = ["0-0", "0-1", "0-2", "0-3", "1-0", "1-1", "1-2", "1-3",
-                                  "2-0", "2-1", "2-2", "2-3", "3-0", "3-1", "3-2", "3-3"]
-        df_valid = df[df[col_risultato].notna() & (df[col_risultato].str.contains("-"))].copy()
-
-        def classifica_risultato(ris):
-            try:
-                home, away = map(int, ris.split("-"))
-            except:
-                return "Altro"
-            if ris in risultati_interessanti:
-                return ris
-            if home > away:
-                return "Altro casa vince"
-            elif home < away:
-                return "Altro ospite vince"
-            else:
-                return "Altro pareggio"
-
-        df_valid["classificato"] = df_valid[col_risultato].apply(classifica_risultato)
-        distribuzione = df_valid["classificato"].value_counts().reset_index()
-        distribuzione.columns = [titolo, "Conteggio"]
-        distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(df_valid) * 100).round(2)
-        distribuzione["Odd Minima"] = distribuzione["Percentuale %"].apply(lambda x: round(100/x, 2) if x > 0 else "-")
-        st.table(distribuzione)
-
-    mostra_risultati_esatti(team_df, "risultato_ht", "HT")
-    mostra_risultati_esatti(team_df, "risultato_ft", "FT")
-
-    temp_ht = team_df["risultato_ht"].str.split("-", expand=True).apply(pd.to_numeric, errors="coerce").fillna(0).astype(int)
-    team_df["tot_goals_ht"] = temp_ht[0] + temp_ht[1]
-    temp_ft = team_df["risultato_ft"].str.split("-", expand=True).apply(pd.to_numeric, errors="coerce").fillna(0).astype(int)
-    team_df["tot_goals_ft"] = temp_ft[0] + temp_ft[1]
-
-    st.subheader(f"Over Goals HT ({len(team_df)} partite)")
-    over_ht = []
-    for t in [0.5, 1.5, 2.5]:
-        count = (team_df["tot_goals_ht"] > t).sum()
-        perc = round((count / len(team_df)) * 100, 2)
-        odd_min = round(100 / perc, 2) if perc > 0 else "-"
-        over_ht.append([f"Over {t} HT", count, perc, odd_min])
-    st.table(pd.DataFrame(over_ht, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
-
-    st.subheader(f"Over Goals FT ({len(team_df)} partite)")
-    over_ft = []
-    for t in [0.5, 1.5, 2.5, 3.5, 4.5]:
-        count = (team_df["tot_goals_ft"] > t).sum()
-        perc = round((count / len(team_df)) * 100, 2)
-        odd_min = round(100 / perc, 2) if perc > 0 else "-"
-        over_ft.append([f"Over {t} FT", count, perc, odd_min])
-    st.table(pd.DataFrame(over_ft, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
-
-    btts = (temp_ft[0] > 0) & (temp_ft[1] > 0)
-    count_btts = btts.sum()
-    perc_btts = round(count_btts / len(team_df) * 100, 2)
-    odd_btts = round(100 / perc_btts, 2) if perc_btts > 0 else "-"
-    st.subheader(f"BTTS SI ({len(team_df)} partite)")
-    st.write(f"BTTS SI: {count_btts} ({perc_btts}%) - Odd Minima: {odd_btts}")
