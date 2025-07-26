@@ -98,12 +98,11 @@ if selected_anno != "Tutti":
 # --- Funzione Calcolo ROI (Back e Lay) ---
 def calcola_roi(matches_df, segno):
     if matches_df.empty:
-        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI%": 0, "Odd Minima": "-"}
+        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI% Back": 0, "ROI% Lay": 0, "Odd Minima": "-"}
 
     risultati = matches_df.copy()
     risultati["back_profit"] = 0.0
     risultati["lay_profit"] = 0.0
-    total_stake = len(risultati)  # 1% per match, quindi totale = n matches
 
     for i, row in risultati.iterrows():
         home_g = int(row.get("gol_home_ft", 0))
@@ -129,10 +128,11 @@ def calcola_roi(matches_df, segno):
     winrate = round((risultati["back_profit"] > 0).mean() * 100, 2)
     back_pts = round(risultati["back_profit"].sum(), 2)
     lay_pts = round(risultati["lay_profit"].sum(), 2)
-    roi = round((back_pts / matches) * 100, 2) if matches > 0 else 0
+    roi_back = round((back_pts / matches) * 100, 2) if matches > 0 else 0
+    roi_lay = round((lay_pts / matches) * 100, 2) if matches > 0 else 0
     odd_min = round(100 / winrate, 2) if winrate > 0 else "-"
 
-    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI%": roi, "Odd Minima": odd_min}
+    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI% Back": roi_back, "ROI% Lay": roi_lay, "Odd Minima": odd_min}
 
 # --- Tabella ROI per Label e Squadre ---
 def genera_tabella_roi(df_input, label_name):
@@ -154,7 +154,7 @@ if not squadre_matches.empty:
     squadre_results = genera_tabella_roi(squadre_matches, f"{selected_home} & {selected_away}")
     results_table.extend(squadre_results)
 
-results_df = pd.DataFrame(results_table, columns=["LABEL", "SEGNO", "Matches", "Win%", "Back Pts", "Lay Pts", "ROI%", "Odd Minima"])
+results_df = pd.DataFrame(results_table, columns=["LABEL", "SEGNO", "Matches", "Win%", "Back Pts", "Lay Pts", "ROI% Back", "ROI% Lay", "Odd Minima"])
 
 # --- Colorazione ROI positivi ---
 def color_rois(val):
@@ -163,7 +163,42 @@ def color_rois(val):
     return ''
 
 st.subheader(f"Risultati ROI per {selected_label}")
-st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
+st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI% Back", "ROI% Lay"]))
+
+# --- Funzione Risultati Esatti ---
+def mostra_risultati_esatti(df_input, titolo):
+    if df_input.empty:
+        st.warning(f"Nessuna partita disponibile per {titolo}.")
+        return
+
+    risultati_interessanti = [
+        "0-0", "0-1", "0-2", "0-3",
+        "1-0", "1-1", "1-2", "1-3",
+        "2-0", "2-1", "2-2", "2-3",
+        "3-0", "3-1", "3-2", "3-3"
+    ]
+
+    def classifica_risultato(ris):
+        try:
+            home, away = map(int, ris.split("-"))
+        except:
+            return "Altro"
+        if ris in risultati_interessanti:
+            return ris
+        if home > away:
+            return "Altro risultato casa vince"
+        elif home < away:
+            return "Altro risultato ospite vince"
+        else:
+            return "Altro pareggio"
+
+    df_input["classificato"] = df_input[titolo].apply(classifica_risultato)
+    distribuzione = df_input["classificato"].value_counts().reset_index()
+    distribuzione.columns = [titolo, "Conteggio"]
+    distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(df_input) * 100).round(2)
+    distribuzione["Odd Minima"] = distribuzione["Percentuale %"].apply(lambda x: round(100/x, 2) if x > 0 else "-")
+    st.subheader(f"Risultati Esatti {titolo} ({len(df_input)} partite)")
+    st.table(distribuzione)
 
 # --- STATISTICHE EXTRA ---
 def calcola_statistiche(df_stats):
@@ -186,12 +221,16 @@ def calcola_statistiche(df_stats):
                          round(100 / ((df_stats["tot_goals_ft"] > t).mean() * 100), 2) if (df_stats["tot_goals_ft"] > t).mean() > 0 else "-")
                         for t in [0.5, 1.5, 2.5, 3.5, 4.5]]
 
-    btts = (df_stats["tot_goals_ft"] > 1).sum()  # entrambe segnano
+    btts = ((temp_ft[0] > 0) & (temp_ft[1] > 0)).sum()
     stats["BTTS"] = f"BTTS SI: {btts} ({round(btts / len(df_stats) * 100, 2)}%)"
     return stats
 
+# --- Mostra Statistiche e Risultati Esatti per le squadre selezionate ---
 if not squadre_matches.empty:
     st.subheader(f"Statistiche per {selected_home} & {selected_away} ({len(squadre_matches)} partite)")
+    mostra_risultati_esatti(squadre_matches, "risultato_ht")
+    mostra_risultati_esatti(squadre_matches, "risultato_ft")
+
     stats = calcola_statistiche(squadre_matches)
     st.write("**Over HT:**")
     st.table(pd.DataFrame(stats["Over HT"], columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
