@@ -68,42 +68,49 @@ selected_label = st.sidebar.selectbox("Seleziona Label Odds", labels)
 if "league" in df.columns:
     leagues = ["Tutte"] + sorted(df["league"].dropna().unique())
     selected_league = st.sidebar.selectbox("Seleziona League", leagues)
+else:
+    selected_league = "Tutte"
 
 if "anno" in df.columns:
     anni = ["Tutti"] + sorted(df["anno"].dropna().unique())
     selected_anno = st.sidebar.selectbox("Seleziona Anno", anni)
+else:
+    selected_anno = "Tutti"
 
-# --- FILTRO SQUADRA HOME ---
+# --- Filtri Home e Away dinamici ---
 if "home_team" in df.columns:
-    if selected_league != "Tutte":
-        home_teams = ["Tutte"] + sorted(df[df["league"] == selected_league]["home_team"].dropna().unique())
-    else:
-        home_teams = ["Tutte"] + sorted(df["home_team"].dropna().unique())
+    home_list = df[df["league"] == selected_league]["home_team"].dropna().unique() if selected_league != "Tutte" else df["home_team"].dropna().unique()
+    home_teams = ["Tutte"] + sorted(home_list)
     selected_home = st.sidebar.selectbox("Seleziona Home Team", home_teams)
+else:
+    selected_home = "Tutte"
 
-# --- FILTRO SQUADRA AWAY ---
 if "away_team" in df.columns:
-    if selected_league != "Tutte":
-        away_teams = ["Tutte"] + sorted(df[df["league"] == selected_league]["away_team"].dropna().unique())
-    else:
-        away_teams = ["Tutte"] + sorted(df["away_team"].dropna().unique())
+    away_list = df[df["league"] == selected_league]["away_team"].dropna().unique() if selected_league != "Tutte" else df["away_team"].dropna().unique()
+    away_teams = ["Tutte"] + sorted(away_list)
     selected_away = st.sidebar.selectbox("Seleziona Away Team", away_teams)
+else:
+    selected_away = "Tutte"
 
 # --- APPLICA FILTRI ---
 filtered_df = df[df["label_odds"] == selected_label].copy()
+
 if selected_league != "Tutte":
     filtered_df = filtered_df[filtered_df["league"] == selected_league]
+
 if selected_anno != "Tutti":
     filtered_df = filtered_df[filtered_df["anno"] == selected_anno]
+
 if selected_home != "Tutte":
     filtered_df = filtered_df[filtered_df["home_team"] == selected_home]
+
 if selected_away != "Tutte":
     filtered_df = filtered_df[filtered_df["away_team"] == selected_away]
 
-# --- Funzione Calcolo ROI (Back e Lay) ---
+# --- Funzione Calcolo ROI ---
 def calcola_roi(matches_df, segno):
     if matches_df.empty:
-        return {"Matches": 0, "Win%": 0, "BackPts": 0, "ROI%": 0, "LayPts": 0}
+        return {"Matches": 0, "Win%": 0, "BackPts": 0, "ROI%": 0, "Odd Minima": "-", "LayPts": 0}
 
     risultati = matches_df.copy()
     risultati["back_profit"] = 0.0
@@ -122,7 +129,7 @@ def calcola_roi(matches_df, segno):
         elif segno == "DRAW":
             vinta = home_g == away_g
             odd = odd_draw
-        else:  # AWAY
+        else:
             vinta = home_g < away_g
             odd = odd_away
 
@@ -134,18 +141,20 @@ def calcola_roi(matches_df, segno):
     back_pts = round(risultati["back_profit"].sum(), 2)
     lay_pts = round(risultati["lay_profit"].sum(), 2)
     roi = round((back_pts / matches) * 100, 2) if matches > 0 else 0
+    odd_min = round(100 / winrate, 2) if winrate > 0 else "-"
 
-    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "ROI%": roi, "LayPts": lay_pts}
+    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "ROI%": roi, "Odd Minima": odd_min, "LayPts": lay_pts}
 
 # --- Tabella ROI ---
 league_results = []
 for segno in ["HOME", "DRAW", "AWAY"]:
     league_results.append(
-        ["League", segno] + list(calcola_roi(filtered_df, segno).values())
+        ["Label Odds", segno] + list(calcola_roi(filtered_df, segno).values())
     )
 
-results_df = pd.DataFrame(league_results, columns=["LABEL", "SEGNO", "Matches", "Win %", "Back Pts", "ROI%", "Lay Pts"])
+results_df = pd.DataFrame(league_results, columns=["LABEL", "SEGNO", "Matches", "Win %", "Back Pts", "ROI%", "Odd Minima", "Lay Pts"])
 
+# --- Colorazione ROI positivi ---
 def color_rois(val):
     if isinstance(val, (int, float)) and val > 0:
         return 'background-color: #b6e8b6'
@@ -153,23 +162,3 @@ def color_rois(val):
 
 st.subheader(f"Risultati ROI per {selected_label}")
 st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
-
-# --- TOP 10 TEAM ---
-def top10_teams(df, label_type):
-    if df.empty:
-        return pd.DataFrame()
-    teams = df["home_team"].unique() if "Home" in label_type else df["away_team"].unique()
-    data = []
-    for team in teams:
-        matches = df[(df["home_team"] == team) | (df["away_team"] == team)]
-        roi_data = calcola_roi(matches, "HOME")
-        data.append([team, roi_data["Matches"], roi_data["Win%"], roi_data["BackPts"], roi_data["ROI%"], roi_data["LayPts"]])
-    return pd.DataFrame(data, columns=["Team", "Matches", "Win %", "Back Pts", "ROI%", "Lay Pts"]).sort_values(by="Back Pts", ascending=False).head(10)
-
-st.subheader(f"Top 10 Team (Back Pts) per {selected_label}")
-top10_df = top10_teams(filtered_df, selected_label)
-if not top10_df.empty:
-    for team in top10_df["Team"]:
-        if st.button(f"Dettagli: {team}"):
-            st.session_state["team_selected"] = team
-    st.dataframe(top10_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
