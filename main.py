@@ -84,21 +84,30 @@ if selected_league != "Tutte":
 if selected_anno != "Tutti":
     filtered_df = filtered_df[filtered_df["anno"] == selected_anno]
 
+if selected_home != "Tutte":
+    filtered_df = filtered_df[filtered_df["home_team"] == selected_home]
+
+if selected_away != "Tutte":
+    filtered_df = filtered_df[filtered_df["away_team"] == selected_away]
+
 # --- Funzione Calcolo ROI (Back e Lay) ---
 def calcola_roi(matches_df, segno):
     if matches_df.empty:
-        return {"Matches": 0, "Win%": 0, "BackPts": 0, "ROI Back %": 0, "LayPts": 0, "ROI Lay %": 0, "Odd Min": "-"}
+        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI%": 0, "Odd Minima": "-"}
 
     risultati = matches_df.copy()
     risultati["back_profit"] = 0.0
     risultati["lay_profit"] = 0.0
 
     for i, row in risultati.iterrows():
-        home_g = int(row.get("gol_home_ft", 0))
-        away_g = int(row.get("gol_away_ft", 0))
-        odd_home = float(str(row.get("odd_home", "0")).replace(",", "."))
-        odd_draw = float(str(row.get("odd_draw", "0")).replace(",", "."))
-        odd_away = float(str(row.get("odd_away", "0")).replace(",", "."))
+        try:
+            home_g = int(row.get("gol_home_ft", 0))
+            away_g = int(row.get("gol_away_ft", 0))
+            odd_home = float(str(row.get("odd_home", "0")).replace(",", "."))
+            odd_draw = float(str(row.get("odd_draw", "0")).replace(",", "."))
+            odd_away = float(str(row.get("odd_away", "0")).replace(",", "."))
+        except:
+            continue
 
         if segno == "HOME":
             vinta = home_g > away_g
@@ -110,52 +119,29 @@ def calcola_roi(matches_df, segno):
             vinta = home_g < away_g
             odd = odd_away
 
-        # BACK
         risultati.at[i, "back_profit"] = (odd - 1) if vinta else -1
-        # LAY
         risultati.at[i, "lay_profit"] = - (odd - 1) if vinta else 1
 
     matches = len(risultati)
     winrate = round((risultati["back_profit"] > 0).mean() * 100, 2)
     back_pts = round(risultati["back_profit"].sum(), 2)
     lay_pts = round(risultati["lay_profit"].sum(), 2)
+    roi = round((back_pts / matches) * 100, 2) if matches > 0 else 0
+    odd_minima = round(100 / winrate, 2) if winrate > 0 else "-"
 
-    roi_back = round((back_pts / matches) * 100, 2) if matches > 0 else 0
-    roi_lay = round((lay_pts / matches) * 100, 2) if matches > 0 else 0
-    odd_min = round(100 / winrate, 2) if winrate > 0 else "-"
+    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI%": roi, "Odd Minima": odd_minima}
 
-    return {
-        "Matches": matches,
-        "Win%": winrate,
-        "BackPts": back_pts,
-        "ROI Back %": roi_back,
-        "LayPts": lay_pts,
-        "ROI Lay %": roi_lay,
-        "Odd Min": odd_min
-    }
-
-# --- Tabella ROI per League, Home, Away ---
+# --- Tabella ROI complessiva ---
 league_results = []
 for segno in ["HOME", "DRAW", "AWAY"]:
     league_results.append(
         ["League", segno] + list(calcola_roi(filtered_df, segno).values())
     )
 
-if selected_home != "Tutte":
-    home_matches = filtered_df[filtered_df["home_team"] == selected_home]
-    for segno in ["HOME", "DRAW", "AWAY"]:
-        league_results.append(
-            [selected_home, segno] + list(calcola_roi(home_matches, segno).values())
-        )
-
-if selected_away != "Tutte":
-    away_matches = filtered_df[filtered_df["away_team"] == selected_away]
-    for segno in ["HOME", "DRAW", "AWAY"]:
-        league_results.append(
-            [selected_away, segno] + list(calcola_roi(away_matches, segno).values())
-        )
-
-results_df = pd.DataFrame(league_results, columns=["LABEL", "SEGNO", "Matches", "Win %", "Back Pts", "ROI Back %", "Lay Pts", "ROI Lay %", "Odd Min"])
+results_df = pd.DataFrame(
+    league_results,
+    columns=["LABEL", "SEGNO", "Matches", "Win %", "Back Pts", "Lay Pts", "ROI%", "Odd Minima"]
+)
 
 # --- Colorazione ROI positivi ---
 def color_rois(val):
@@ -164,19 +150,33 @@ def color_rois(val):
     return ''
 
 st.subheader(f"Risultati ROI per {selected_label}")
-st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "ROI Back %", "Lay Pts", "ROI Lay %"]))
+st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
 
-# --- TOP 10 TEAM (per Back Pts) ---
-def top10_teams(df, segno="HOME"):
-    teams = df["home_team"].unique()
+# --- TOP 10 TEAM (Back Pts) ---
+def top10_teams(df, label):
     data = []
-    for team in teams:
-        matches = df[df["home_team"] == team]
-        roi_data = calcola_roi(matches, segno)
-        data.append([team, roi_data["Matches"], roi_data["Win%"], roi_data["BackPts"], roi_data["ROI Back %"], roi_data["LayPts"], roi_data["ROI Lay %"], roi_data["Odd Min"]])
-    top_df = pd.DataFrame(data, columns=["Team", "Matches", "Win %", "Back Pts", "ROI Back %", "Lay Pts", "ROI Lay %", "Odd Min"])
+    if "Home" in label:
+        teams = df["home_team"].unique()
+        for team in teams:
+            matches = df[df["home_team"] == team]
+            roi_data = calcola_roi(matches, "HOME")
+            data.append([team, roi_data["Matches"], roi_data["Win%"], roi_data["BackPts"], roi_data["LayPts"], roi_data["ROI%"]])
+    elif "Away" in label:
+        teams = df["away_team"].unique()
+        for team in teams:
+            matches = df[df["away_team"] == team]
+            roi_data = calcola_roi(matches, "AWAY")
+            data.append([team, roi_data["Matches"], roi_data["Win%"], roi_data["BackPts"], roi_data["LayPts"], roi_data["ROI%"]])
+    else:  # Supercompetitive
+        teams = pd.concat([df["home_team"], df["away_team"]]).unique()
+        for team in teams:
+            matches = df[(df["home_team"] == team) | (df["away_team"] == team)]
+            roi_data = calcola_roi(matches, "HOME")  # Valutiamo come team generico
+            data.append([team, roi_data["Matches"], roi_data["Win%"], roi_data["BackPts"], roi_data["LayPts"], roi_data["ROI%"]])
+
+    top_df = pd.DataFrame(data, columns=["Team", "Matches", "Win %", "Back Pts", "Lay Pts", "ROI%"])
     return top_df.sort_values(by="Back Pts", ascending=False).head(10)
 
-st.subheader(f"Top 10 Team (Back Pts) per {selected_label}")
-top10_df = top10_teams(filtered_df)
-st.dataframe(top10_df.style.applymap(color_rois, subset=["Back Pts", "ROI Back %", "Lay Pts", "ROI Lay %"]))
+st.subheader(f"Top 10 Team per {selected_label}")
+top10_df = top10_teams(filtered_df, selected_label)
+st.dataframe(top10_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
