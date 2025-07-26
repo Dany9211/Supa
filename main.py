@@ -83,7 +83,8 @@ selected_home = st.sidebar.selectbox("Seleziona Home Team", squadre_home)
 selected_away = st.sidebar.selectbox("Seleziona Away Team", squadre_away)
 
 # --- APPLICA FILTRI ---
-filtered_df = df[df["label_odds"] == selected_label].copy()
+filtered_df = df.copy()
+filtered_df = filtered_df[filtered_df["label_odds"] == selected_label]
 
 if selected_league != "Tutte":
     filtered_df = filtered_df[filtered_df["league"] == selected_league]
@@ -97,55 +98,61 @@ if selected_home != "Tutte":
 if selected_away != "Tutte":
     filtered_df = filtered_df[filtered_df["away_team"] == selected_away]
 
-# --- Funzione Calcolo ROI (Back e Lay) ---
+st.subheader("Dati filtrati")
+st.write(f"**Partite trovate:** {len(filtered_df)}")
+
+# --- Funzione Calcolo ROI ---
 def calcola_roi(matches_df, segno):
     if matches_df.empty:
         return {"Matches": 0, "Win%": 0, "OddMin": "-", "BackPts": 0, "ROI Back %": 0, "LayPts": 0, "ROI Lay %": 0}
 
-    risultati = matches_df.copy()
-    risultati["back_profit"] = 0.0
-    risultati["lay_profit"] = 0.0
+    profitti_back, profitti_lay = [], []
+    win = 0
 
-    for i, row in risultati.iterrows():
+    for _, row in matches_df.iterrows():
         home_g = int(row.get("gol_home_ft", 0))
         away_g = int(row.get("gol_away_ft", 0))
-        odd_home = float(str(row.get("odd_home", "0")).replace(",", "."))
-        odd_draw = float(str(row.get("odd_draw", "0")).replace(",", "."))
-        odd_away = float(str(row.get("odd_away", "0")).replace(",", "."))
+        odd_home = float(str(row.get("odd_home", 0)).replace(",", "."))
+        odd_draw = float(str(row.get("odd_draw", 0)).replace(",", "."))
+        odd_away = float(str(row.get("odd_away", 0)).replace(",", "."))
 
         if segno == "HOME":
-            vinta = home_g > away_g
+            vincente = home_g > away_g
             odd = odd_home
         elif segno == "DRAW":
-            vinta = home_g == away_g
+            vincente = home_g == away_g
             odd = odd_draw
-        else:  # AWAY
-            vinta = home_g < away_g
+        else:
+            vincente = home_g < away_g
             odd = odd_away
 
-        # BACK
-        risultati.at[i, "back_profit"] = (odd - 1) if vinta else -1
-        # LAY
-        risultati.at[i, "lay_profit"] = - (odd - 1) if vinta else 1
+        # Back
+        profit_back = (odd - 1) if vincente else -1
+        profitti_back.append(profit_back)
 
-    matches = len(risultati)
-    winrate = round((risultati["back_profit"] > 0).mean() * 100, 2)
-    back_pts = round(risultati["back_profit"].sum(), 2)
-    lay_pts = round(risultati["lay_profit"].sum(), 2)
+        # Lay
+        profit_lay = - (odd - 1) if vincente else 1
+        profitti_lay.append(profit_lay)
+
+        if vincente:
+            win += 1
+
+    matches = len(matches_df)
+    winrate = round((win / matches) * 100, 2) if matches > 0 else 0
+    back_pts = round(sum(profitti_back), 2)
+    lay_pts = round(sum(profitti_lay), 2)
     roi_back = round((back_pts / matches) * 100, 2) if matches > 0 else 0
     roi_lay = round((lay_pts / matches) * 100, 2) if matches > 0 else 0
     odd_min = round(100 / winrate, 2) if winrate > 0 else "-"
 
     return {"Matches": matches, "Win%": winrate, "OddMin": odd_min, "BackPts": back_pts, "ROI Back %": roi_back, "LayPts": lay_pts, "ROI Lay %": roi_lay}
 
-# --- Tabella ROI per League/Home/Away ---
-league_results = []
+# --- Tabella ROI per 1, X, 2 ---
+roi_results = []
 for segno in ["HOME", "DRAW", "AWAY"]:
-    league_results.append(
-        ["Totale", segno] + list(calcola_roi(filtered_df, segno).values())
-    )
+    roi_results.append([segno] + list(calcola_roi(filtered_df, segno).values()))
 
-results_df = pd.DataFrame(league_results, columns=["LABEL", "SEGNO", "Matches", "Win %", "Odd Min", "Back Pts", "ROI Back %", "Lay Pts", "ROI Lay %"])
+results_df = pd.DataFrame(roi_results, columns=["Segno", "Matches", "Win %", "Odd Min", "Back Pts", "ROI Back %", "Lay Pts", "ROI Lay %"])
 
 # --- Colorazione ROI positivi ---
 def color_rois(val):
@@ -153,5 +160,5 @@ def color_rois(val):
         return 'background-color: #b6e8b6'
     return ''
 
-st.subheader(f"Risultati ROI per {selected_label}")
+st.subheader(f"ROI per {selected_label}")
 st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "ROI Back %", "Lay Pts", "ROI Lay %"]))
