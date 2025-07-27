@@ -69,18 +69,26 @@ selected_label = st.sidebar.selectbox("Seleziona Label Odds", labels)
 if "league" in df.columns:
     leagues = ["Tutte"] + sorted(df["league"].dropna().unique())
     selected_league = st.sidebar.selectbox("Seleziona League", leagues)
+else:
+    selected_league = "Tutte"
 
 if "anno" in df.columns:
     anni = ["Tutti"] + sorted(df["anno"].dropna().unique())
     selected_anno = st.sidebar.selectbox("Seleziona Anno", anni)
+else:
+    selected_anno = "Tutti"
 
 if "home_team" in df.columns:
     home_teams = ["Tutte"] + sorted(df["home_team"].dropna().unique())
     selected_home = st.sidebar.selectbox("Seleziona Home Team", home_teams)
+else:
+    selected_home = "Tutte"
 
 if "away_team" in df.columns:
     away_teams = ["Tutte"] + sorted(df["away_team"].dropna().unique())
     selected_away = st.sidebar.selectbox("Seleziona Away Team", away_teams)
+else:
+    selected_away = "Tutte"
 
 # --- Applica Filtri ---
 filtered_df = df[df["label_odds"] == selected_label].copy()
@@ -100,7 +108,7 @@ if selected_away != "Tutte":
 # --- Funzione Calcolo ROI ---
 def calcola_roi(matches_df, segno):
     if matches_df.empty:
-        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI%": 0, "Odd Minima": "-"}
+        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI_Back%": 0, "ROI_Lay%": 0, "Odd Minima": "-"}
 
     risultati = matches_df.copy()
     risultati["back_profit"] = 0.0
@@ -130,17 +138,18 @@ def calcola_roi(matches_df, segno):
     winrate = round((risultati["back_profit"] > 0).mean() * 100, 2)
     back_pts = round(risultati["back_profit"].sum(), 2)
     lay_pts = round(risultati["lay_profit"].sum(), 2)
-    roi = round(back_pts / matches * 100, 2) if matches > 0 else 0
+    roi_back = round(back_pts / matches * 100, 2) if matches > 0 else 0
+    roi_lay = round(lay_pts / matches * 100, 2) if matches > 0 else 0
     odd_minima = round(100 / winrate, 2) if winrate > 0 else "-"
 
-    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI%": roi, "Odd Minima": odd_minima}
+    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI_Back%": roi_back, "ROI_Lay%": roi_lay, "Odd Minima": odd_minima}
 
 # --- Tabella ROI ---
 roi_results = []
 for segno in ["HOME", "DRAW", "AWAY"]:
     roi_results.append([selected_label, segno] + list(calcola_roi(filtered_df, segno).values()))
 
-results_df = pd.DataFrame(roi_results, columns=["Label", "Segno", "Matches", "Win %", "Back Pts", "Lay Pts", "ROI%", "Odd Minima"])
+results_df = pd.DataFrame(roi_results, columns=["Label", "Segno", "Matches", "Win %", "Back Pts", "Lay Pts", "ROI_Back%", "ROI_Lay%", "Odd Minima"])
 
 def color_rois(val):
     if isinstance(val, (int, float)) and val > 0:
@@ -148,7 +157,7 @@ def color_rois(val):
     return ''
 
 st.subheader(f"Risultati ROI per {selected_label}")
-st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI%"]))
+st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI_Back%", "ROI_Lay%"]))
 
 # --- Funzione Risultati Esatti ---
 def mostra_risultati_esatti(df_input, col_risultato):
