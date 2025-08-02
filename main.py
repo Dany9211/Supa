@@ -1,210 +1,217 @@
 import streamlit as st
-import psycopg2
 import pandas as pd
+from supabase import create_client, Client
 import numpy as np
 
-st.set_page_config(page_title="Analisi ROI e Statistiche", layout="wide")
-st.title("Analisi ROI per Label Odds, Squadre e Campionati")
+# --- CONFIGURAZIONE DEL DATABASE SUPABASE ---
+# I dati di connessione devono essere nel file .streamlit/secrets.toml
+#
+# Esempio di .streamlit/secrets.toml:
+# [supabase]
+# url = "https://<tuo_ID_progetto>.supabase.co"
+# key = "<la_tua_chiave_anon>"
 
-# --- Connessione DB ---
+# Configurazione della pagina Streamlit
+st.set_page_config(page_title="Analisi Profittabilità Scommesse", layout="wide")
+st.title("📊 Analisi Scommesse Sportive (Back vs Lay)")
+
+# --- CONNESSIONE E CARICAMENTO DATI DA SUPABASE ---
 @st.cache_data
-def run_query(query: str):
-    conn = psycopg2.connect(
-        host=st.secrets["postgres"]["host"],
-        port=st.secrets["postgres"]["port"],
-        dbname=st.secrets["postgres"]["dbname"],
-        user=st.secrets["postgres"]["user"],
-        password=st.secrets["postgres"]["password"],
-        sslmode="require"
-    )
-    df = pd.read_sql(query, conn)
-    conn.close()
-    return df
+def init_supabase():
+    """Crea un client Supabase con le credenziali da secrets.toml."""
+    try:
+        url = st.secrets["supabase"]["url"]
+        key = st.secrets["supabase"]["key"]
+        return create_client(url, key)
+    except KeyError as e:
+        st.error(f"Errore: Credenziale Supabase mancante in secrets.toml: {e}")
+        st.stop()
 
-# --- Caricamento dati ---
-try:
-    df = run_query('SELECT * FROM "allcamp";')
-    st.write(f"**Righe iniziali nel dataset:** {len(df)}")
-except Exception as e:
-    st.error(f"Errore durante il caricamento: {e}")
+supabase = init_supabase()
+
+@st.cache_data
+def get_data_from_supabase():
+    """Recupera tutti i dati dalla tabella 'matches' del database Supabase."""
+    try:
+        response = supabase.from_("matches").select("*").execute()
+        return pd.DataFrame(response.data)
+    except Exception as e:
+        st.error(f"Errore durante il recupero dei dati da Supabase: {e}")
+        return pd.DataFrame()
+
+# --- CARICAMENTO E PULIZIA DATI ---
+data_load_state = st.info("Caricamento dati in corso...")
+df = get_data_from_supabase()
+data_load_state.empty()
+
+if df.empty:
+    st.error("Nessun dato trovato. Controlla la connessione al database e il nome della tabella.")
     st.stop()
 
-# --- Creazione colonne risultato ---
-if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
-    df["risultato_ft"] = df["gol_home_ft"].astype(str) + "-" + df["gol_away_ft"].astype(str)
+# Pulizia e conversione dei dati numerici
+required_cols = ["league", "home_team", "away_team", "odd_home", "odd_draw", "odd_away", "gol_home_ft", "gol_away_ft"]
+if not all(col in df.columns for col in required_cols):
+    st.error("Una o più colonne necessarie non sono presenti nel database.")
+    st.info(f"Colonne richieste: {required_cols}")
+    st.stop()
 
-if "gol_home_ht" in df.columns and "gol_away_ht" in df.columns:
-    df["risultato_ht"] = df["gol_home_ht"].astype(str) + "-" + df["gol_away_ht"].astype(str)
+df.dropna(subset=required_cols, inplace=True)
+df.reset_index(drop=True, inplace=True)
 
-# --- Label Odds ---
-def assegna_label_odds(row):
-    try:
-        oh = float(str(row["odd_home"]).replace(",", "."))
-        oa = float(str(row["odd_away"]).replace(",", "."))
-    except:
-        return "N/A"
+for col in ["odd_home", "odd_draw", "odd_away"]:
+    df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
+for col in ["gol_home_ft", "gol_away_ft"]:
+    df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    if oh <= 1.5:
-        return "Home strong fav"
-    elif 1.51 <= oh <= 2.0:
-        return "Home med fav"
-    elif 2.01 <= oh <= 2.5 and oa > 3.0:
-        return "Home small fav"
-    elif oa <= 1.5:
-        return "Away strong fav"
-    elif 1.51 <= oa <= 2.0:
-        return "Away med fav"
-    elif 2.01 <= oa <= 2.5 and oh > 3.0:
-        return "Away small fav"
-    elif oh < 3.0 and oa < 3.0:
-        return "Supercompetitive"
-    return "Altro"
+df.dropna(inplace=True)
 
-df["label_odds"] = df.apply(assegna_label_odds, axis=1)
+# --- FUNZIONE DI CALCOLO METRICHE (BACK E LAY) ---
+def calcola_metrica_scommessa(df_matches, bet_type, stake_percent=1):
+    """
+    Calcola le metriche di profitto (Winrate, Odd Breakeven, Punti, ROI)
+    per un determinato tipo di scommessa (Back o Lay).
+    """
+    if df_matches.empty:
+        return {
+            "back_winrate": 0, "back_odd_breakeven": 0, "back_points": 0, "back_roi": 0,
+            "lay_winrate": 0, "lay_odd_breakeven": 0, "lay_points": 0, "lay_roi": 0
+        }
 
-# --- FILTRI ---
-labels = sorted(df["label_odds"].dropna().unique())
-selected_label = st.sidebar.selectbox("Seleziona Label Odds", labels)
+    total_bets = len(df_matches)
+    stake = stake_percent / 100
+    
+    odds_col = f"odd_{bet_type}"
+    
+    if bet_type == "home":
+        back_win_condition = df_matches["gol_home_ft"] > df_matches["gol_away_ft"]
+    elif bet_type == "draw":
+        back_win_condition = df_matches["gol_home_ft"] == df_matches["gol_away_ft"]
+    else: # away
+        back_win_condition = df_matches["gol_home_ft"] < df_matches["gol_away_ft"]
 
-if "league" in df.columns:
-    leagues = ["Tutte"] + sorted(df["league"].dropna().unique())
-    selected_league = st.sidebar.selectbox("Seleziona League", leagues)
-else:
-    selected_league = "Tutte"
+    # Calcoli per il "Back" (Puntare)
+    back_wins = back_win_condition.sum()
+    back_winrate = (back_wins / total_bets) * 100 if total_bets > 0 else 0
+    back_odd_breakeven = 100 / back_winrate if back_winrate > 0 else 0
+    
+    back_profits = np.where(back_win_condition, (df_matches[odds_col] - 1) * stake, -stake)
+    back_points_return = back_profits.sum() * 100
+    back_roi = (back_points_return / (total_bets * stake_percent)) if total_bets > 0 else 0
 
-if "anno" in df.columns:
-    anni = ["Tutti"] + sorted(df["anno"].dropna().unique())
-    selected_anno = st.sidebar.selectbox("Seleziona Anno", anni)
-else:
-    selected_anno = "Tutti"
+    # Calcoli per il "Lay" (Bancare)
+    lay_win_condition = ~back_win_condition
+    lay_wins = lay_win_condition.sum()
+    lay_winrate = (lay_wins / total_bets) * 100 if total_bets > 0 else 0
+    lay_odd_breakeven = 100 / lay_winrate if lay_winrate > 0 else 0
+    
+    lay_profits = np.where(lay_win_condition, stake, - (df_matches[odds_col] - 1) * stake)
+    lay_points_return = lay_profits.sum() * 100
+    lay_roi = (lay_points_return / (total_bets * stake_percent)) if total_bets > 0 else 0
+    
+    return {
+        "back_winrate": back_winrate, "back_odd_breakeven": back_odd_breakeven, 
+        "back_points": back_points_return, "back_roi": back_roi,
+        "lay_winrate": lay_winrate, "lay_odd_breakeven": lay_odd_breakeven, 
+        "lay_points": lay_points_return, "lay_roi": lay_roi
+    }
 
-if "home_team" in df.columns:
-    home_teams = ["Tutte"] + sorted(df["home_team"].dropna().unique())
-    selected_home = st.sidebar.selectbox("Seleziona Home Team", home_teams)
-else:
-    selected_home = "Tutte"
+# --- FILTRI NELLA SIDEBAR ---
+st.sidebar.header("Filtri")
+st.sidebar.info(f"Partite totali nel database: {len(df)}")
 
-if "away_team" in df.columns:
-    away_teams = ["Tutte"] + sorted(df["away_team"].dropna().unique())
-    selected_away = st.sidebar.selectbox("Seleziona Away Team", away_teams)
-else:
-    selected_away = "Tutte"
+# Filtri Campionato, Squadra Home, Squadra Away
+leagues = sorted(df["league"].unique())
+selected_leagues = st.sidebar.multiselect("Seleziona Campionato", leagues, default=leagues)
 
-# --- Applica Filtri ---
-filtered_df = df[df["label_odds"] == selected_label].copy()
+home_teams = sorted(df["home_team"].unique())
+selected_home_teams = st.sidebar.multiselect("Seleziona Squadra Home", home_teams)
 
-if selected_league != "Tutte":
-    filtered_df = filtered_df[filtered_df["league"] == selected_league]
+away_teams = sorted(df["away_team"].unique())
+selected_away_teams = st.sidebar.multiselect("Seleziona Squadra Away", away_teams)
 
-if selected_anno != "Tutti":
-    filtered_df = filtered_df[filtered_df["anno"] == selected_anno]
+# Filtri quote con slider
+st.sidebar.subheader("Fascia di Quote")
+min_home_odd, max_home_odd = st.sidebar.slider("Quote Home", min_value=1.0, max_value=20.0, value=(1.0, 20.0), step=0.1)
+min_draw_odd, max_draw_odd = st.sidebar.slider("Quote Pareggio", min_value=1.0, max_value=20.0, value=(1.0, 20.0), step=0.1)
+min_away_odd, max_away_odd = st.sidebar.slider("Quote Away", min_value=1.0, max_value=20.0, value=(1.0, 20.0), step=0.1)
 
-if selected_home != "Tutte":
-    filtered_df = filtered_df[filtered_df["home_team"] == selected_home]
+# --- APPLICAZIONE DEI FILTRI ---
+filtered_df = df[
+    (df["league"].isin(selected_leagues)) &
+    (df["odd_home"] >= min_home_odd) & (df["odd_home"] <= max_home_odd) &
+    (df["odd_draw"] >= min_draw_odd) & (df["odd_draw"] <= max_draw_odd) &
+    (df["odd_away"] >= min_away_odd) & (df["odd_away"] <= max_away_odd)
+]
 
-if selected_away != "Tutte":
-    filtered_df = filtered_df[filtered_df["away_team"] == selected_away]
+if selected_home_teams:
+    filtered_df = filtered_df[filtered_df["home_team"].isin(selected_home_teams)]
+if selected_away_teams:
+    filtered_df = filtered_df[filtered_df["away_team"].isin(selected_away_teams)]
 
-# --- Funzione Calcolo ROI ---
-def calcola_roi(matches_df, segno):
-    if matches_df.empty:
-        return {"Matches": 0, "Win%": 0, "BackPts": 0, "LayPts": 0, "ROI_Back%": 0, "ROI_Lay%": 0, "Odd Minima": "-"}
+# --- VISUALIZZAZIONE RISULTATI ---
+st.subheader(f"Risultati per {len(filtered_df)} partite filtrate")
 
-    risultati = matches_df.copy()
-    risultati["back_profit"] = 0.0
-    risultati["lay_profit"] = 0.0
+if filtered_df.empty:
+    st.warning("Nessuna partita trovata con i filtri selezionati. Prova a modificare i filtri.")
+    st.stop()
 
-    for i, row in risultati.iterrows():
-        home_g = int(row.get("gol_home_ft", 0))
-        away_g = int(row.get("gol_away_ft", 0))
-        odd_home = float(str(row.get("odd_home", "0")).replace(",", "."))
-        odd_draw = float(str(row.get("odd_draw", "0")).replace(",", "."))
-        odd_away = float(str(row.get("odd_away", "0")).replace(",", "."))
+home_metrics = calcola_metrica_scommessa(filtered_df, 'home')
+draw_metrics = calcola_metrica_scommessa(filtered_df, 'draw')
+away_metrics = calcola_metrica_scommessa(filtered_df, 'away')
 
-        if segno == "HOME":
-            vinta = home_g > away_g
-            odd = odd_home
-        elif segno == "DRAW":
-            vinta = home_g == away_g
-            odd = odd_draw
-        else:  # AWAY
-            vinta = home_g < away_g
-            odd = odd_away
+# Sezione "Puntare" (Back)
+st.header("📈 Analisi 'Puntare' (Back)")
+col1, col2, col3 = st.columns(3)
 
-        risultati.at[i, "back_profit"] = (odd - 1) if vinta else -1
-        risultati.at[i, "lay_profit"] = - (odd - 1) if vinta else 1
+with col1:
+    st.subheader("Home")
+    st.metric("Winrate", f"{home_metrics['back_winrate']:.2f}%")
+    st.metric("Odd Breakeven", f"{home_metrics['back_odd_breakeven']:.2f}")
+    st.metric("Ritorno (Points)", f"{home_metrics['back_points']:.2f}")
+    st.metric("ROI", f"{home_metrics['back_roi']:.2f}%")
+    
+with col2:
+    st.subheader("Pareggio")
+    st.metric("Winrate", f"{draw_metrics['back_winrate']:.2f}%")
+    st.metric("Odd Breakeven", f"{draw_metrics['back_odd_breakeven']:.2f}")
+    st.metric("Ritorno (Points)", f"{draw_metrics['back_points']:.2f}")
+    st.metric("ROI", f"{draw_metrics['back_roi']:.2f}%")
 
-    matches = len(risultati)
-    winrate = round((risultati["back_profit"] > 0).mean() * 100, 2)
-    back_pts = round(risultati["back_profit"].sum(), 2)
-    lay_pts = round(risultati["lay_profit"].sum(), 2)
-    roi_back = round(back_pts / matches * 100, 2) if matches > 0 else 0
-    roi_lay = round(lay_pts / matches * 100, 2) if matches > 0 else 0
-    odd_minima = round(100 / winrate, 2) if winrate > 0 else "-"
+with col3:
+    st.subheader("Away")
+    st.metric("Winrate", f"{away_metrics['back_winrate']:.2f}%")
+    st.metric("Odd Breakeven", f"{away_metrics['back_odd_breakeven']:.2f}")
+    st.metric("Ritorno (Points)", f"{away_metrics['back_points']:.2f}")
+    st.metric("ROI", f"{away_metrics['back_roi']:.2f}%")
+    
+st.markdown("---")
 
-    return {"Matches": matches, "Win%": winrate, "BackPts": back_pts, "LayPts": lay_pts, "ROI_Back%": roi_back, "ROI_Lay%": roi_lay, "Odd Minima": odd_minima}
+# Sezione "Bancare" (Lay)
+st.header("📉 Analisi 'Bancare' (Lay)")
+col1, col2, col3 = st.columns(3)
 
-# --- Tabella ROI ---
-roi_results = []
-for segno in ["HOME", "DRAW", "AWAY"]:
-    roi_results.append([selected_label, segno] + list(calcola_roi(filtered_df, segno).values()))
+with col1:
+    st.subheader("Lay Home")
+    st.metric("Winrate", f"{home_metrics['lay_winrate']:.2f}%")
+    st.metric("Odd Breakeven", f"{home_metrics['lay_odd_breakeven']:.2f}")
+    st.metric("Ritorno (Points)", f"{home_metrics['lay_points']:.2f}")
+    st.metric("ROI", f"{home_metrics['lay_roi']:.2f}%")
 
-results_df = pd.DataFrame(roi_results, columns=["Label", "Segno", "Matches", "Win %", "Back Pts", "Lay Pts", "ROI_Back%", "ROI_Lay%", "Odd Minima"])
+with col2:
+    st.subheader("Lay Pareggio")
+    st.metric("Winrate", f"{draw_metrics['lay_winrate']:.2f}%")
+    st.metric("Odd Breakeven", f"{draw_metrics['lay_odd_breakeven']:.2f}")
+    st.metric("Ritorno (Points)", f"{draw_metrics['lay_points']:.2f}")
+    st.metric("ROI", f"{draw_metrics['lay_roi']:.2f}%")
 
-def color_rois(val):
-    if isinstance(val, (int, float)) and val > 0:
-        return 'background-color: #b6e8b6'
-    return ''
+with col3:
+    st.subheader("Lay Away")
+    st.metric("Winrate", f"{away_metrics['lay_winrate']:.2f}%")
+    st.metric("Odd Breakeven", f"{away_metrics['lay_odd_breakeven']:.2f}")
+    st.metric("Ritorno (Points)", f"{away_metrics['lay_points']:.2f}")
+    st.metric("ROI", f"{away_metrics['lay_roi']:.2f}%")
 
-st.subheader(f"Risultati ROI per {selected_label}")
-st.dataframe(results_df.style.applymap(color_rois, subset=["Back Pts", "Lay Pts", "ROI_Back%", "ROI_Lay%"]))
+st.markdown("---")
+if st.checkbox("Mostra partite filtrate"):
+    st.dataframe(filtered_df)
 
-# --- Funzione Risultati Esatti ---
-def mostra_risultati_esatti(df_input, col_risultato):
-    if col_risultato not in df_input.columns:
-        st.warning(f"Colonna {col_risultato} non presente.")
-        return
-
-    risultati_interessanti = [
-        "0-0", "0-1", "0-2", "0-3",
-        "1-0", "1-1", "1-2", "1-3",
-        "2-0", "2-1", "2-2", "2-3",
-        "3-0", "3-1", "3-2", "3-3"
-    ]
-
-    def classifica_risultato(ris):
-        try:
-            home, away = map(int, ris.split("-"))
-        except:
-            return "Altro"
-        if ris in risultati_interessanti:
-            return ris
-        if home > away:
-            return "Altro risultato casa vince"
-        elif home < away:
-            return "Altro risultato ospite vince"
-        else:
-            return "Altro pareggio"
-
-    df_input = df_input[df_input[col_risultato].notna()].copy()
-    df_input["classificato"] = df_input[col_risultato].apply(classifica_risultato)
-    distribuzione = df_input["classificato"].value_counts().reset_index()
-    distribuzione.columns = [col_risultato, "Conteggio"]
-    distribuzione["Percentuale %"] = (distribuzione["Conteggio"] / len(df_input) * 100).round(2)
-    distribuzione["Odd Minima"] = distribuzione["Percentuale %"].apply(lambda x: round(100/x, 2) if x > 0 else "-")
-
-    st.subheader(f"Risultati Esatti {col_risultato} ({len(df_input)} partite)")
-    st.table(distribuzione)
-
-# --- Analisi Squadre Selezionate ---
-if selected_home != "Tutte" or selected_away != "Tutte":
-    squadre_matches = filtered_df.copy()
-    if selected_home != "Tutte":
-        squadre_matches = squadre_matches[squadre_matches["home_team"] == selected_home]
-    if selected_away != "Tutte":
-        squadre_matches = squadre_matches[squadre_matches["away_team"] == selected_away]
-
-    st.subheader(f"Statistiche per {selected_home} - {selected_away} ({selected_label})")
-
-    mostra_risultati_esatti(squadre_matches, "risultato_ht")
-    mostra_risultati_esatti(squadre_matches, "risultato_ft")
