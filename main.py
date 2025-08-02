@@ -61,10 +61,9 @@ def calculate_returns(df, outcome_type, bet_type):
     stake = 1.0
     if df.empty:
         return {
-            'Ritorno Punti': 0, 
-            'WinRate %': 0, 
-            'ROI %': 0, 
-            'Odd Minima': '-'
+            'Win%': 0, 
+            'Pts': 0, 
+            'Roi': 0
         }
         
     wins = 0
@@ -89,19 +88,18 @@ def calculate_returns(df, outcome_type, bet_type):
         else: # 'Lay'
             if result != outcome_type:
                 wins += 1
-                total_profit += (stake / (odd - 1)) if odd > 1 else 0  # Profitto Lay
+                # Calcola il profitto Lay corretto
+                total_profit += stake / (odd - 1) if odd > 1 else 0
             else:
                 total_profit -= stake # Perdita Lay
 
     winrate = (wins / total_bets) * 100 if total_bets > 0 else 0
     roi = (total_profit / (total_bets * stake)) * 100 if total_bets > 0 else 0
-    odd_minima = round(100 / winrate, 2) if winrate > 0 else '-'
 
     return {
-        'Ritorno Punti': round(total_profit, 2),
-        'WinRate %': round(winrate, 2),
-        'ROI %': round(roi, 2),
-        'Odd Minima': odd_minima
+        'Win%': round(winrate, 2),
+        'Pts': round(total_profit, 2),
+        'Roi': round(roi, 2)
     }
 
 def color_positive_negative(val):
@@ -128,7 +126,7 @@ if 'home_team' in df_original.columns:
     selected_home = st.sidebar.selectbox('Seleziona Squadra Home', squadre_home)
 else:
     st.sidebar.warning("Colonna 'home_team' non trovata.")
-    selected_home = 'Tutte'
+    selected_home = 'Tutti'
 
 # Filtro Squadra Away
 if 'away_team' in df_original.columns:
@@ -136,7 +134,7 @@ if 'away_team' in df_original.columns:
     selected_away = st.sidebar.selectbox('Seleziona Squadra Away', squadre_away)
 else:
     st.sidebar.warning("Colonna 'away_team' non trovata.")
-    selected_away = 'Tutte'
+    selected_away = 'Tutti'
 
 # Filtro Quote
 st.sidebar.subheader("Fasce di Quote")
@@ -179,14 +177,14 @@ if filtered_df.empty:
 else:
     results_data_general = []
     if 'odd_home' in filtered_df.columns:
-        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Back", **calculate_returns(filtered_df, 'home', 'Back')})
-        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Lay", **calculate_returns(filtered_df, 'home', 'Lay')})
+        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'home', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'home', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'home', 'Back')['Roi']})
+        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'home', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'home', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'home', 'Lay')['Roi']})
     if 'odd_draw' in filtered_df.columns:
-        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Back", **calculate_returns(filtered_df, 'draw', 'Back')})
-        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Lay", **calculate_returns(filtered_df, 'draw', 'Lay')})
+        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'draw', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'draw', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'draw', 'Back')['Roi']})
+        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'draw', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'draw', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'draw', 'Lay')['Roi']})
     if 'odd_away' in filtered_df.columns:
-        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Back", **calculate_returns(filtered_df, 'away', 'Back')})
-        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Lay", **calculate_returns(filtered_df, 'away', 'Lay')})
+        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'away', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'away', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'away', 'Back')['Roi']})
+        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'away', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'away', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'away', 'Lay')['Roi']})
 
     if results_data_general:
         results_df_general = pd.DataFrame(results_data_general)
@@ -202,100 +200,103 @@ st.markdown("---")
 # --- SEZIONE 2: ANALISI PERSONALIZZATA PER SQUADRE ---
 # ==============================================================================
 st.header("2. Analisi Personalizzata per Squadre")
-st.write("Analisi del rendimento di due squadre in base a specifiche fasce di quote e al ruolo (Home/Away).")
+st.write("Analisi del rendimento di una o più squadre in base a specifiche fasce di quote e al ruolo (Home/Away).")
 
 if 'home_team' in df_original.columns and 'away_team' in df_original.columns:
-    teams_list = sorted(list(set(df_original['home_team'].unique()).union(df_original['away_team'].unique())))
+    all_teams = sorted(list(set(df_original['home_team'].unique()).union(df_original['away_team'].unique())))
+    selected_teams = st.multiselect('Seleziona le squadre da analizzare', all_teams, default=all_teams[:2])
 
-    col_team1, col_team2 = st.columns(2)
-    with col_team1:
-        team_1 = st.selectbox('Seleziona Squadra 1', teams_list, index=0)
-    with col_team2:
-        team_2 = st.selectbox('Seleziona Squadra 2', teams_list, index=1)
-        
     st.markdown("---")
     
-    filter_type = st.radio(
-        "Scegli il tipo di quota di riferimento per il filtro:",
-        ("Quota Home", "Quota Away"),
-        key="custom_filter_type"
-    )
-
     col_custom_odds_1, col_custom_odds_2 = st.columns(2)
     with col_custom_odds_1:
         min_odd_custom = st.number_input('Min Quota', value=1.01, step=0.01, key="min_odd_custom")
     with col_custom_odds_2:
         max_odd_custom = st.number_input('Max Quota', value=50.0, step=0.01, key="max_odd_custom")
 
-    results_data_specific = []
-    
-    # --- Calcolo dei risultati per Squadra 1 ---
-    if not df_original.empty:
-        df_team1_filtered = pd.DataFrame()
-        if filter_type == "Quota Home":
-            df_team1_filtered = df_original[
-                (df_original['home_team'] == team_1) & 
-                (df_original['odd_home'].between(min_odd_custom, max_odd_custom))
-            ]
-        else: # Quota Away
-            df_team1_filtered = df_original[
-                (df_original['away_team'] == team_1) & 
-                (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
-            ]
-        
-        st.write(f"Partite filtrate per **{team_1}**: **{len(df_team1_filtered)}** trovate")
+    if selected_teams:
+        results_data_specific = []
 
-        if not df_team1_filtered.empty:
-            for bet_type in ['Back', 'Lay']:
-                results_data_specific.append({
-                    "Squadra": team_1, "Tipo Scommessa": bet_type, "Esito": "1 (Vittoria)",
-                    **calculate_returns(df_team1_filtered, 'home' if filter_type == "Quota Home" else 'away', bet_type)
-                })
-                results_data_specific.append({
-                    "Squadra": team_1, "Tipo Scommessa": bet_type, "Esito": "X (Pareggio)",
-                    **calculate_returns(df_team1_filtered, 'draw', bet_type)
-                })
-                results_data_specific.append({
-                    "Squadra": team_1, "Tipo Scommessa": bet_type, "Esito": "2 (Sconfitta)",
-                    **calculate_returns(df_team1_filtered, 'away' if filter_type == "Quota Home" else 'home', bet_type)
-                })
-
-    # --- Calcolo dei risultati per Squadra 2 ---
-    if not df_original.empty:
-        df_team2_filtered = pd.DataFrame()
-        if filter_type == "Quota Home":
-            df_team2_filtered = df_original[
-                (df_original['away_team'] == team_2) & 
-                (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
-            ]
-        else: # Quota Away
-            df_team2_filtered = df_original[
-                (df_original['home_team'] == team_2) & 
+        for team in selected_teams:
+            # Filtra le partite in cui la squadra gioca in casa e la sua quota è nel range
+            df_home_filtered = df_original[
+                (df_original['home_team'] == team) & 
                 (df_original['odd_home'].between(min_odd_custom, max_odd_custom))
             ]
 
-        st.write(f"Partite filtrate per **{team_2}**: **{len(df_team2_filtered)}** trovate")
-        
-        if not df_team2_filtered.empty:
-            for bet_type in ['Back', 'Lay']:
-                results_data_specific.append({
-                    "Squadra": team_2, "Tipo Scommessa": bet_type, "Esito": "1 (Vittoria)",
-                    **calculate_returns(df_team2_filtered, 'away' if filter_type == "Quota Home" else 'home', bet_type)
+            # Filtra le partite in cui la squadra gioca in trasferta e la sua quota è nel range
+            df_away_filtered = df_original[
+                (df_original['away_team'] == team) & 
+                (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
+            ]
+
+            total_matches = len(df_home_filtered) + len(df_away_filtered)
+
+            # Se ci sono partite per la squadra, calcola i ritorni
+            if total_matches > 0:
+                row_data = {
+                    'Label': team,
+                    ('Matches', ''): total_matches
+                }
+
+                # Dati per Home
+                home_back_results = calculate_returns(df_home_filtered, 'home', 'Back')
+                home_lay_results = calculate_returns(df_home_filtered, 'home', 'Lay')
+                
+                # Dati per Draw (calcolati sia sulle partite in casa che su quelle in trasferta)
+                df_all_filtered = pd.concat([df_home_filtered, df_away_filtered])
+                draw_back_results = calculate_returns(df_all_filtered, 'draw', 'Back')
+                draw_lay_results = calculate_returns(df_all_filtered, 'draw', 'Lay')
+
+                # Dati per Away
+                away_back_results = calculate_returns(df_away_filtered, 'away', 'Back')
+                away_lay_results = calculate_returns(df_away_filtered, 'away', 'Lay')
+
+                row_data.update({
+                    ('Home', 'Back', 'Win%'): home_back_results['Win%'],
+                    ('Home', 'Back', 'Pts'): home_back_results['Pts'],
+                    ('Home', 'Back', 'Roi'): home_back_results['Roi'],
+                    ('Home', 'Lay', 'Win%'): home_lay_results['Win%'],
+                    ('Home', 'Lay', 'Pts'): home_lay_results['Pts'],
+                    ('Home', 'Lay', 'Roi'): home_lay_results['Roi'],
+                    
+                    ('Draw', 'Back', 'Win%'): draw_back_results['Win%'],
+                    ('Draw', 'Back', 'Pts'): draw_back_results['Pts'],
+                    ('Draw', 'Back', 'Roi'): draw_back_results['Roi'],
+                    ('Draw', 'Lay', 'Win%'): draw_lay_results['Win%'],
+                    ('Draw', 'Lay', 'Pts'): draw_lay_results['Pts'],
+                    ('Draw', 'Lay', 'Roi'): draw_lay_results['Roi'],
+                    
+                    ('Away', 'Back', 'Win%'): away_back_results['Win%'],
+                    ('Away', 'Back', 'Pts'): away_back_results['Pts'],
+                    ('Away', 'Back', 'Roi'): away_back_results['Roi'],
+                    ('Away', 'Lay', 'Win%'): away_lay_results['Win%'],
+                    ('Away', 'Lay', 'Pts'): away_lay_results['Pts'],
+                    ('Away', 'Lay', 'Roi'): away_lay_results['Roi']
                 })
-                results_data_specific.append({
-                    "Squadra": team_2, "Tipo Scommessa": bet_type, "Esito": "X (Pareggio)",
-                    **calculate_returns(df_team2_filtered, 'draw', bet_type)
-                })
-                results_data_specific.append({
-                    "Squadra": team_2, "Tipo Scommessa": bet_type, "Esito": "2 (Sconfitta)",
-                    **calculate_returns(df_team2_filtered, 'home' if filter_type == "Quota Home" else 'away', bet_type)
-                })
-    
-    if results_data_specific:
-        results_specific_df = pd.DataFrame(results_data_specific)
-        st.dataframe(results_specific_df.style.applymap(color_positive_negative, subset=['Ritorno Punti', 'ROI %']), use_container_width=True)
-    else:
-        st.info("Seleziona le squadre e una fascia di quote per visualizzare i risultati.")
+                results_data_specific.append(row_data)
+
+        if results_data_specific:
+            # Creazione del DataFrame con MultiIndex per le colonne
+            columns = pd.MultiIndex.from_tuples([
+                ('Matches', ''),
+                ('Home', 'Back', 'Win%'), ('Home', 'Back', 'Pts'), ('Home', 'Back', 'Roi'),
+                ('Home', 'Lay', 'Win%'), ('Home', 'Lay', 'Pts'), ('Home', 'Lay', 'Roi'),
+                ('Draw', 'Back', 'Win%'), ('Draw', 'Back', 'Pts'), ('Draw', 'Back', 'Roi'),
+                ('Draw', 'Lay', 'Win%'), ('Draw', 'Lay', 'Pts'), ('Draw', 'Lay', 'Roi'),
+                ('Away', 'Back', 'Win%'), ('Away', 'Back', 'Pts'), ('Away', 'Back', 'Roi'),
+                ('Away', 'Lay', 'Win%'), ('Away', 'Lay', 'Pts'), ('Away', 'Lay', 'Roi')
+            ], names=['Outcome', 'Bet Type', 'Metric'])
+
+            results_df = pd.DataFrame(results_data_specific).set_index('Label')
+            results_df.columns = columns
+            
+            # Applica la formattazione
+            styled_df = results_df.style.applymap(color_positive_negative, subset=pd.IndexSlice[:, pd.IndexSlice[:, ['Pts', 'Roi']]])
+            st.dataframe(styled_df, use_container_width=True)
+            
+        else:
+            st.info("Nessuna partita trovata per le squadre e i filtri di quota selezionati.")
 
 else:
     st.warning("Le colonne 'home_team' e/o 'away_team' non sono disponibili per questa analisi.")
