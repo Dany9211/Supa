@@ -221,18 +221,11 @@ if 'home_team' in df_original.columns and 'away_team' in df_original.columns:
         key="custom_filter_type"
     )
 
-    special_filter = st.checkbox("Filtra entrambe le squadre con quote < 3.00", key="special_odd_filter")
-    
-    if special_filter:
-        min_odd_custom = 1.01
-        max_odd_custom = 2.99
-        st.info("Filtro speciale attivo: le quote sono impostate tra 1.01 e 2.99.")
-    else:
-        col_custom_odds_1, col_custom_odds_2 = st.columns(2)
-        with col_custom_odds_1:
-            min_odd_custom = st.number_input('Min Quota', value=1.01, step=0.01, key="min_odd_custom")
-        with col_custom_odds_2:
-            max_odd_custom = st.number_input('Max Quota', value=50.0, step=0.01, key="max_odd_custom")
+    col_custom_odds_1, col_custom_odds_2 = st.columns(2)
+    with col_custom_odds_1:
+        min_odd_custom = st.number_input('Min Quota', value=1.01, step=0.01, key="min_odd_custom")
+    with col_custom_odds_2:
+        max_odd_custom = st.number_input('Max Quota', value=50.0, step=0.01, key="max_odd_custom")
 
     results_data_specific = []
     
@@ -250,6 +243,8 @@ if 'home_team' in df_original.columns and 'away_team' in df_original.columns:
                 (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
             ]
         
+        st.write(f"Partite filtrate per **{team_1}**: **{len(df_team1_filtered)}** trovate")
+
         if not df_team1_filtered.empty:
             for bet_type in ['Back', 'Lay']:
                 results_data_specific.append({
@@ -278,6 +273,8 @@ if 'home_team' in df_original.columns and 'away_team' in df_original.columns:
                 (df_original['home_team'] == team_2) & 
                 (df_original['odd_home'].between(min_odd_custom, max_odd_custom))
             ]
+
+        st.write(f"Partite filtrate per **{team_2}**: **{len(df_team2_filtered)}** trovate")
         
         if not df_team2_filtered.empty:
             for bet_type in ['Back', 'Lay']:
