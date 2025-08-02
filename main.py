@@ -109,6 +109,21 @@ def color_positive_negative(val):
         color = 'green' if val > 0 else 'red'
         return f'color: {color}'
     return None
+    
+# --- Nuova funzione per lo stile del DataFrame con MultiIndex ---
+def style_multiindex_df(df):
+    """
+    Genera un DataFrame di stili per colorare 'Pts' e 'Roi' di un MultiIndex DataFrame.
+    """
+    # Crea un DataFrame della stessa forma per contenere le stringhe di stile
+    color_df = pd.DataFrame('', index=df.index, columns=df.columns)
+    
+    for col in df.columns:
+        # Controlla se l'ultimo elemento della tupla del nome della colonna è 'Pts' o 'Roi'
+        if isinstance(col, tuple) and col[-1] in ['Pts', 'Roi']:
+            color_df[col] = df[col].apply(lambda x: 'color: green;' if x > 0 else 'color: red;')
+            
+    return color_df
 
 # --- SIDEBAR: Filtri per l'analisi generale ---
 st.sidebar.header("Filtri Partite")
@@ -330,13 +345,8 @@ if selected_away != 'Tutte':
 if results_data_specific:
     results_df = pd.DataFrame(results_data_specific).set_index('Label')
     
-    # Crea un Indice di sezione per tutte le righe e solo le colonne 'Pts' e 'Roi'
-    idx = pd.IndexSlice
-    cols_to_style = idx[:, :, ['Pts', 'Roi']]
-    
-    # Applica lo stile utilizzando applymap con il corretto subset
-    # Il `color_positive_negative` inline è stato spostato qui per chiarezza
-    styled_df = results_df.style.applymap(color_positive_negative, subset=cols_to_style)
+    # Applica lo stile utilizzando la nuova funzione
+    styled_df = results_df.style.apply(style_multiindex_df, axis=None)
     
     st.dataframe(styled_df, use_container_width=True)
 else:
