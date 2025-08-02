@@ -237,81 +237,63 @@ if 'home_team' in df_original.columns and 'away_team' in df_original.columns:
     results_data_specific = []
     
     # --- Calcolo dei risultati per Squadra 1 ---
-    if filter_type == "Quota Home":
-        df_team1_filtered = df_original[
-            (df_original['home_team'] == team_1) & 
-            (df_original['odd_home'].between(min_odd_custom, max_odd_custom))
-        ]
-    else: # Quota Away
-        df_team1_filtered = df_original[
-            (df_original['away_team'] == team_1) & 
-            (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
-        ]
-    
-    if not df_team1_filtered.empty:
-        results_data_specific.append({
-            "Squadra": team_1, "Tipo Scommessa": "Back", "Esito": "1 (Vince)",
-            **calculate_returns(df_team1_filtered, 'home', 'Back') if filter_type == "Quota Home" else **calculate_returns(df_team1_filtered, 'away', 'Back')
-        })
-        results_data_specific.append({
-            "Squadra": team_1, "Tipo Scommessa": "Lay", "Esito": "1 (Vince)",
-            **calculate_returns(df_team1_filtered, 'home', 'Lay') if filter_type == "Quota Home" else **calculate_returns(df_team1_filtered, 'away', 'Lay')
-        })
-        results_data_specific.append({
-            "Squadra": team_1, "Tipo Scommessa": "Back", "Esito": "X (Pareggio)",
-            **calculate_returns(df_team1_filtered, 'draw', 'Back')
-        })
-        results_data_specific.append({
-            "Squadra": team_1, "Tipo Scommessa": "Lay", "Esito": "X (Pareggio)",
-            **calculate_returns(df_team1_filtered, 'draw', 'Lay')
-        })
-        results_data_specific.append({
-            "Squadra": team_1, "Tipo Scommessa": "Back", "Esito": "2 (Perde)",
-            **calculate_returns(df_team1_filtered, 'away', 'Back') if filter_type == "Quota Home" else **calculate_returns(df_team1_filtered, 'home', 'Back')
-        })
-        results_data_specific.append({
-            "Squadra": team_1, "Tipo Scommessa": "Lay", "Esito": "2 (Perde)",
-            **calculate_returns(df_team1_filtered, 'away', 'Lay') if filter_type == "Quota Home" else **calculate_returns(df_team1_filtered, 'home', 'Lay')
-        })
+    if not df_original.empty:
+        df_team1_filtered = pd.DataFrame()
+        if filter_type == "Quota Home":
+            df_team1_filtered = df_original[
+                (df_original['home_team'] == team_1) & 
+                (df_original['odd_home'].between(min_odd_custom, max_odd_custom))
+            ]
+        else: # Quota Away
+            df_team1_filtered = df_original[
+                (df_original['away_team'] == team_1) & 
+                (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
+            ]
+        
+        if not df_team1_filtered.empty:
+            for bet_type in ['Back', 'Lay']:
+                results_data_specific.append({
+                    "Squadra": team_1, "Tipo Scommessa": bet_type, "Esito": "1 (Vittoria)",
+                    **calculate_returns(df_team1_filtered, 'home' if filter_type == "Quota Home" else 'away', bet_type)
+                })
+                results_data_specific.append({
+                    "Squadra": team_1, "Tipo Scommessa": bet_type, "Esito": "X (Pareggio)",
+                    **calculate_returns(df_team1_filtered, 'draw', bet_type)
+                })
+                results_data_specific.append({
+                    "Squadra": team_1, "Tipo Scommessa": bet_type, "Esito": "2 (Sconfitta)",
+                    **calculate_returns(df_team1_filtered, 'away' if filter_type == "Quota Home" else 'home', bet_type)
+                })
 
     # --- Calcolo dei risultati per Squadra 2 ---
-    if filter_type == "Quota Home":
-        df_team2_filtered = df_original[
-            (df_original['away_team'] == team_2) & 
-            (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
-        ]
-    else: # Quota Away
-        df_team2_filtered = df_original[
-            (df_original['home_team'] == team_2) & 
-            (df_original['odd_home'].between(min_odd_custom, max_odd_custom))
-        ]
+    if not df_original.empty:
+        df_team2_filtered = pd.DataFrame()
+        if filter_type == "Quota Home":
+            df_team2_filtered = df_original[
+                (df_original['away_team'] == team_2) & 
+                (df_original['odd_away'].between(min_odd_custom, max_odd_custom))
+            ]
+        else: # Quota Away
+            df_team2_filtered = df_original[
+                (df_original['home_team'] == team_2) & 
+                (df_original['odd_home'].between(min_odd_custom, max_odd_custom))
+            ]
+        
+        if not df_team2_filtered.empty:
+            for bet_type in ['Back', 'Lay']:
+                results_data_specific.append({
+                    "Squadra": team_2, "Tipo Scommessa": bet_type, "Esito": "1 (Vittoria)",
+                    **calculate_returns(df_team2_filtered, 'away' if filter_type == "Quota Home" else 'home', bet_type)
+                })
+                results_data_specific.append({
+                    "Squadra": team_2, "Tipo Scommessa": bet_type, "Esito": "X (Pareggio)",
+                    **calculate_returns(df_team2_filtered, 'draw', bet_type)
+                })
+                results_data_specific.append({
+                    "Squadra": team_2, "Tipo Scommessa": bet_type, "Esito": "2 (Sconfitta)",
+                    **calculate_returns(df_team2_filtered, 'home' if filter_type == "Quota Home" else 'away', bet_type)
+                })
     
-    if not df_team2_filtered.empty:
-        results_data_specific.append({
-            "Squadra": team_2, "Tipo Scommessa": "Back", "Esito": "1 (Vince)",
-            **calculate_returns(df_team2_filtered, 'away', 'Back') if filter_type == "Quota Home" else **calculate_returns(df_team2_filtered, 'home', 'Back')
-        })
-        results_data_specific.append({
-            "Squadra": team_2, "Tipo Scommessa": "Lay", "Esito": "1 (Vince)",
-            **calculate_returns(df_team2_filtered, 'away', 'Lay') if filter_type == "Quota Home" else **calculate_returns(df_team2_filtered, 'home', 'Lay')
-        })
-        results_data_specific.append({
-            "Squadra": team_2, "Tipo Scommessa": "Back", "Esito": "X (Pareggio)",
-            **calculate_returns(df_team2_filtered, 'draw', 'Back')
-        })
-        results_data_specific.append({
-            "Squadra": team_2, "Tipo Scommessa": "Lay", "Esito": "X (Pareggio)",
-            **calculate_returns(df_team2_filtered, 'draw', 'Lay')
-        })
-        results_data_specific.append({
-            "Squadra": team_2, "Tipo Scommessa": "Back", "Esito": "2 (Perde)",
-            **calculate_returns(df_team2_filtered, 'home', 'Back') if filter_type == "Quota Home" else **calculate_returns(df_team2_filtered, 'away', 'Back')
-        })
-        results_data_specific.append({
-            "Squadra": team_2, "Tipo Scommessa": "Lay", "Esito": "2 (Perde)",
-            **calculate_returns(df_team2_filtered, 'home', 'Lay') if filter_type == "Quota Home" else **calculate_returns(df_team2_filtered, 'away', 'Lay')
-        })
-
     if results_data_specific:
         results_specific_df = pd.DataFrame(results_data_specific)
         st.dataframe(results_specific_df.style.applymap(color_positive_negative, subset=['Ritorno Punti', 'ROI %']), use_container_width=True)
