@@ -9,7 +9,7 @@ import numpy as np
 # --- FINE ISTRUZIONI ---
 
 # --- CONFIGURAZIONE DEL DATABASE SUPABASE ---
-# I dati di connessione devono essere nel file .streamlit/secrets.toml
+# I dati di connessione devono essere salvati nel file .streamlit/secrets.toml
 #
 # Esempio di .streamlit/secrets.toml:
 # [supabase]
@@ -18,7 +18,8 @@ import numpy as np
 
 # Configurazione della pagina Streamlit
 st.set_page_config(page_title="Analisi Profittabilità Scommesse", layout="wide")
-st.title("📊 Analisi Scommesse Sportive (Back vs Lay)")
+st.title("📊 Analisi Scommesse: Back vs Lay")
+st.subheader("Filtra i dati e calcola le metriche di profitto su 1% di stake")
 
 # --- CONNESSIONE E CARICAMENTO DATI DA SUPABASE ---
 @st.cache_data
@@ -64,6 +65,7 @@ df.dropna(subset=required_cols, inplace=True)
 df.reset_index(drop=True, inplace=True)
 
 for col in ["odd_home", "odd_draw", "odd_away"]:
+    # Sostituisce la virgola con il punto e converte in numerico
     df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
 for col in ["gol_home_ft", "gol_away_ft"]:
     df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -73,8 +75,8 @@ df.dropna(inplace=True)
 # --- FUNZIONE DI CALCOLO METRICHE (BACK E LAY) ---
 def calcola_metrica_scommessa(df_matches, bet_type, stake_percent=1):
     """
-    Calcola le metriche di profitto (Winrate, Odd Breakeven, Punti, ROI)
-    per un determinato tipo di scommessa (Back o Lay).
+    Calcola le metriche di profitto (Winrate, Odd Breakeven, Ritorno Punti, ROI)
+    per un determinato tipo di scommessa (Home, Draw, Away) e una stake fissa.
     """
     if df_matches.empty:
         return {
@@ -83,10 +85,12 @@ def calcola_metrica_scommessa(df_matches, bet_type, stake_percent=1):
         }
 
     total_bets = len(df_matches)
-    stake = stake_percent / 100
+    # 1% di stake = 1 punto, quindi stake_percent è l'unità di misura.
+    stake_unit = stake_percent
     
     odds_col = f"odd_{bet_type}"
     
+    # Condizione di vittoria per il 'Back' (puntare)
     if bet_type == "home":
         back_win_condition = df_matches["gol_home_ft"] > df_matches["gol_away_ft"]
     elif bet_type == "draw":
@@ -94,24 +98,26 @@ def calcola_metrica_scommessa(df_matches, bet_type, stake_percent=1):
     else: # away
         back_win_condition = df_matches["gol_home_ft"] < df_matches["gol_away_ft"]
 
-    # Calcoli per il "Back" (Puntare)
+    # Calcoli per il "Back"
     back_wins = back_win_condition.sum()
     back_winrate = (back_wins / total_bets) * 100 if total_bets > 0 else 0
     back_odd_breakeven = 100 / back_winrate if back_winrate > 0 else 0
     
-    back_profits = np.where(back_win_condition, (df_matches[odds_col] - 1) * stake, -stake)
-    back_points_return = back_profits.sum() * 100
-    back_roi = (back_points_return / (total_bets * stake_percent)) if total_bets > 0 else 0
+    # Calcolo del ritorno in punti (Punti guadagnati se vinci, -1 se perdi)
+    back_profits = np.where(back_win_condition, (df_matches[odds_col] - 1) * stake_unit, -stake_unit)
+    back_points_return = back_profits.sum()
+    back_roi = (back_points_return / (total_bets * stake_unit)) * 100 if total_bets > 0 else 0
 
-    # Calcoli per il "Lay" (Bancare)
+    # Calcoli per il "Lay" (bancare)
     lay_win_condition = ~back_win_condition
     lay_wins = lay_win_condition.sum()
     lay_winrate = (lay_wins / total_bets) * 100 if total_bets > 0 else 0
     lay_odd_breakeven = 100 / lay_winrate if lay_winrate > 0 else 0
     
-    lay_profits = np.where(lay_win_condition, stake, - (df_matches[odds_col] - 1) * stake)
-    lay_points_return = lay_profits.sum() * 100
-    lay_roi = (lay_points_return / (total_bets * stake_percent)) if total_bets > 0 else 0
+    # Calcolo del ritorno in punti (Punti guadagnati se vinci, -quota se perdi)
+    lay_profits = np.where(lay_win_condition, stake_unit, - (df_matches[odds_col] - 1) * stake_unit)
+    lay_points_return = lay_profits.sum()
+    lay_roi = (lay_points_return / (total_bets * stake_unit)) * 100 if total_bets > 0 else 0
     
     return {
         "back_winrate": back_winrate, "back_odd_breakeven": back_odd_breakeven, 
@@ -171,21 +177,21 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.subheader("Home")
     st.metric("Winrate", f"{home_metrics['back_winrate']:.2f}%")
-    st.metric("Odd Breakeven", f"{home_metrics['back_odd_breakeven']:.2f}")
+    st.metric("Odd minima (breakeven)", f"{home_metrics['back_odd_breakeven']:.2f}")
     st.metric("Ritorno (Points)", f"{home_metrics['back_points']:.2f}")
     st.metric("ROI", f"{home_metrics['back_roi']:.2f}%")
     
 with col2:
     st.subheader("Pareggio")
     st.metric("Winrate", f"{draw_metrics['back_winrate']:.2f}%")
-    st.metric("Odd Breakeven", f"{draw_metrics['back_odd_breakeven']:.2f}")
+    st.metric("Odd minima (breakeven)", f"{draw_metrics['back_odd_breakeven']:.2f}")
     st.metric("Ritorno (Points)", f"{draw_metrics['back_points']:.2f}")
     st.metric("ROI", f"{draw_metrics['back_roi']:.2f}%")
 
 with col3:
     st.subheader("Away")
     st.metric("Winrate", f"{away_metrics['back_winrate']:.2f}%")
-    st.metric("Odd Breakeven", f"{away_metrics['back_odd_breakeven']:.2f}")
+    st.metric("Odd minima (breakeven)", f"{away_metrics['back_odd_breakeven']:.2f}")
     st.metric("Ritorno (Points)", f"{away_metrics['back_points']:.2f}")
     st.metric("ROI", f"{away_metrics['back_roi']:.2f}%")
     
@@ -198,21 +204,21 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.subheader("Lay Home")
     st.metric("Winrate", f"{home_metrics['lay_winrate']:.2f}%")
-    st.metric("Odd Breakeven", f"{home_metrics['lay_odd_breakeven']:.2f}")
+    st.metric("Odd minima (breakeven)", f"{home_metrics['lay_odd_breakeven']:.2f}")
     st.metric("Ritorno (Points)", f"{home_metrics['lay_points']:.2f}")
     st.metric("ROI", f"{home_metrics['lay_roi']:.2f}%")
 
 with col2:
     st.subheader("Lay Pareggio")
     st.metric("Winrate", f"{draw_metrics['lay_winrate']:.2f}%")
-    st.metric("Odd Breakeven", f"{draw_metrics['lay_odd_breakeven']:.2f}")
+    st.metric("Odd minima (breakeven)", f"{draw_metrics['lay_odd_breakeven']:.2f}")
     st.metric("Ritorno (Points)", f"{draw_metrics['lay_points']:.2f}")
     st.metric("ROI", f"{draw_metrics['lay_roi']:.2f}%")
 
 with col3:
     st.subheader("Lay Away")
     st.metric("Winrate", f"{away_metrics['lay_winrate']:.2f}%")
-    st.metric("Odd Breakeven", f"{away_metrics['lay_odd_breakeven']:.2f}")
+    st.metric("Odd minima (breakeven)", f"{away_metrics['lay_odd_breakeven']:.2f}")
     st.metric("Ritorno (Points)", f"{away_metrics['lay_points']:.2f}")
     st.metric("ROI", f"{away_metrics['lay_roi']:.2f}%")
 
