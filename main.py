@@ -180,65 +180,53 @@ def calculate_returns(df, outcome_type, bet_type):
         'Odd Minima': odd_minima
     }
 
-# Calcola e mostra i risultati per ogni esito
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+# Calcola e mostra i risultati in una tabella
+results_data = []
 
+# Calcoli per l'esito 1 (Casa)
 if 'odd_home' in filtered_df.columns:
-    with col1:
-        st.subheader("1 (Back)")
-        results = calculate_returns(filtered_df, 'home', 'Back')
-        st.metric("Ritorno Punti", results['Ritorno Punti'])
-        st.metric("WinRate", f"{results['WinRate %']}%")
-        st.metric("ROI", f"{results['ROI %']}%")
-        st.metric("Odd Minima", results['Odd Minima'])
-    with col2:
-        st.subheader("1 (Lay)")
-        results = calculate_returns(filtered_df, 'home', 'Lay')
-        st.metric("Ritorno Punti", results['Ritorno Punti'])
-        st.metric("WinRate", f"{results['WinRate %']}%")
-        st.metric("ROI", f"{results['ROI %']}%")
-        st.metric("Odd Minima", results['Odd Minima'])
-else:
-    with col1:
-        st.warning("Colonna 'odd_home' non trovata.")
+    results_data.append({
+        "Esito": "1 (Casa)",
+        "Tipo Scommessa": "Back",
+        **calculate_returns(filtered_df, 'home', 'Back')
+    })
+    results_data.append({
+        "Esito": "1 (Casa)",
+        "Tipo Scommessa": "Lay",
+        **calculate_returns(filtered_df, 'home', 'Lay')
+    })
 
+# Calcoli per l'esito X (Pareggio)
 if 'odd_draw' in filtered_df.columns:
-    with col3:
-        st.subheader("X (Back)")
-        results = calculate_returns(filtered_df, 'draw', 'Back')
-        st.metric("Ritorno Punti", results['Ritorno Punti'])
-        st.metric("WinRate", f"{results['WinRate %']}%")
-        st.metric("ROI", f"{results['ROI %']}%")
-        st.metric("Odd Minima", results['Odd Minima'])
-    with col4:
-        st.subheader("X (Lay)")
-        results = calculate_returns(filtered_df, 'draw', 'Lay')
-        st.metric("Ritorno Punti", results['Ritorno Punti'])
-        st.metric("WinRate", f"{results['WinRate %']}%")
-        st.metric("ROI", f"{results['ROI %']}%")
-        st.metric("Odd Minima", results['Odd Minima'])
-else:
-    with col3:
-        st.warning("Colonna 'odd_draw' non trovata.")
+    results_data.append({
+        "Esito": "X (Pareggio)",
+        "Tipo Scommessa": "Back",
+        **calculate_returns(filtered_df, 'draw', 'Back')
+    })
+    results_data.append({
+        "Esito": "X (Pareggio)",
+        "Tipo Scommessa": "Lay",
+        **calculate_returns(filtered_df, 'draw', 'Lay')
+    })
 
+# Calcoli per l'esito 2 (Trasferta)
 if 'odd_away' in filtered_df.columns:
-    with col5:
-        st.subheader("2 (Back)")
-        results = calculate_returns(filtered_df, 'away', 'Back')
-        st.metric("Ritorno Punti", results['Ritorno Punti'])
-        st.metric("WinRate", f"{results['WinRate %']}%")
-        st.metric("ROI", f"{results['ROI %']}%")
-        st.metric("Odd Minima", results['Odd Minima'])
-    with col6:
-        st.subheader("2 (Lay)")
-        results = calculate_returns(filtered_df, 'away', 'Lay')
-        st.metric("Ritorno Punti", results['Ritorno Punti'])
-        st.metric("WinRate", f"{results['WinRate %']}%")
-        st.metric("ROI", f"{results['ROI %']}%")
-        st.metric("Odd Minima", results['Odd Minima'])
+    results_data.append({
+        "Esito": "2 (Trasferta)",
+        "Tipo Scommessa": "Back",
+        **calculate_returns(filtered_df, 'away', 'Back')
+    })
+    results_data.append({
+        "Esito": "2 (Trasferta)",
+        "Tipo Scommessa": "Lay",
+        **calculate_returns(filtered_df, 'away', 'Lay')
+    })
+
+if results_data:
+    results_df = pd.DataFrame(results_data)
+    st.dataframe(results_df, use_container_width=True)
 else:
-    with col5:
-        st.warning("Colonna 'odd_away' non trovata.")
+    st.warning("Impossibile calcolare i risultati. Assicurati che le colonne delle quote (odd_home, odd_draw, odd_away) siano presenti nel tuo database.")
 
 # --- Dati Filtrati (opzionale) ---
 with st.expander("Mostra Dati Filtrati", expanded=False):
