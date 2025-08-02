@@ -3,6 +3,11 @@ import pandas as pd
 from supabase import create_client, Client
 import numpy as np
 
+# --- ISTRUZIONI DI INSTALLAZIONE ---
+# Se riscontri un errore "ModuleNotFoundError", esegui questo comando nel tuo terminale:
+# pip install streamlit supabase pandas
+# --- FINE ISTRUZIONI ---
+
 # --- CONFIGURAZIONE DEL DATABASE SUPABASE ---
 # I dati di connessione devono essere nel file .streamlit/secrets.toml
 #
