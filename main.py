@@ -102,17 +102,13 @@ def calculate_returns(df, outcome_type, bet_type):
         'Roi': round(roi, 2)
     }
 
-# --- Funzione per colorare i valori positivi e negativi in un DataFrame con MultiIndex ---
-def highlight_pts_roi(s):
-    """
-    Applica la colorazione verde/rossa per i valori di 'Pts' e 'Roi'.
-    Questa funzione lavora su una Serie (una colonna) alla volta.
-    """
-    # Controlla se la colonna corrente è una delle colonne che vogliamo stilizzare
-    if s.name[2] in ['Pts', 'Roi']:
-        return s.apply(lambda x: 'color: green;' if x > 0 else 'color: red;')
-    # Altrimenti, ritorna uno stile vuoto per le altre colonne
-    return [''] * len(s)
+# --- Funzione per colorare i valori positivi e negativi ---
+def color_positive_negative(val):
+    """Funzione per colorare i valori positivi e negativi."""
+    if isinstance(val, (int, float)):
+        color = 'green' if val > 0 else 'red'
+        return f'color: {color}'
+    return None
 
 # --- SIDEBAR: Filtri per l'analisi generale ---
 st.sidebar.header("Filtri Partite")
@@ -334,8 +330,13 @@ if selected_away != 'Tutte':
 if results_data_specific:
     results_df = pd.DataFrame(results_data_specific).set_index('Label')
     
-    # Applica lo stile utilizzando la nuova funzione
-    styled_df = results_df.style.apply(highlight_pts_roi, axis=0)
+    # Crea un Indice di sezione per tutte le righe e solo le colonne 'Pts' e 'Roi'
+    idx = pd.IndexSlice
+    cols_to_style = idx[:, :, ['Pts', 'Roi']]
+    
+    # Applica lo stile utilizzando applymap con il corretto subset
+    # Il `color_positive_negative` inline è stato spostato qui per chiarezza
+    styled_df = results_df.style.applymap(color_positive_negative, subset=cols_to_style)
     
     st.dataframe(styled_df, use_container_width=True)
 else:
