@@ -102,12 +102,17 @@ def calculate_returns(df, outcome_type, bet_type):
         'Roi': round(roi, 2)
     }
 
-def color_positive_negative(val):
-    """Funzione per colorare i valori positivi e negativi."""
-    if isinstance(val, (int, float)):
-        color = 'green' if val > 0 else 'red'
-        return f'color: {color}'
-    return None
+# --- Funzione per colorare i valori positivi e negativi in un DataFrame con MultiIndex ---
+def highlight_pts_roi(s):
+    """
+    Applica la colorazione verde/rossa per i valori di 'Pts' e 'Roi'.
+    Questa funzione lavora su una Serie (una colonna) alla volta.
+    """
+    # Controlla se la colonna corrente è una delle colonne che vogliamo stilizzare
+    if s.name[2] in ['Pts', 'Roi']:
+        return s.apply(lambda x: 'color: green;' if x > 0 else 'color: red;')
+    # Altrimenti, ritorna uno stile vuoto per le altre colonne
+    return [''] * len(s)
 
 # --- SIDEBAR: Filtri per l'analisi generale ---
 st.sidebar.header("Filtri Partite")
@@ -184,6 +189,14 @@ else:
 
     if results_data_general:
         results_df_general = pd.DataFrame(results_data_general)
+        
+        # Funzione di stile inline per la sezione generale
+        def color_positive_negative(val):
+            if isinstance(val, (int, float)):
+                color = 'green' if val > 0 else 'red'
+                return f'color: {color}'
+            return None
+        
         st.dataframe(results_df_general.style.applymap(color_positive_negative, subset=['Ritorno Punti', 'ROI %']), use_container_width=True)
     else:
         st.warning("Impossibile calcolare i risultati. Verificare le colonne del database.")
@@ -320,10 +333,10 @@ if selected_away != 'Tutte':
 
 if results_data_specific:
     results_df = pd.DataFrame(results_data_specific).set_index('Label')
-    # Uso di pd.IndexSlice per specificare il subset di colonne per la colorazione
-    idx = pd.IndexSlice
-    cols_to_style = [col for col in results_df.columns if col[2] in ['Pts', 'Roi']]
-    styled_df = results_df.style.applymap(color_positive_negative, subset=idx[:, cols_to_style])
+    
+    # Applica lo stile utilizzando la nuova funzione
+    styled_df = results_df.style.apply(highlight_pts_roi, axis=0)
+    
     st.dataframe(styled_df, use_container_width=True)
 else:
     st.info("Nessuna squadra da analizzare con i filtri selezionati.")
