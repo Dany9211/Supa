@@ -50,11 +50,11 @@ except Exception as e:
 st.sidebar.header("Filtri Partite")
 
 # Filtro Campionato
-if 'campionato' in df_original.columns:
-    campionati = ['Tutti'] + sorted(df_original['campionato'].unique().tolist())
+if 'league' in df_original.columns:
+    campionati = ['Tutti'] + sorted(df_original['league'].unique().tolist())
     selected_campionato = st.sidebar.selectbox('Seleziona Campionato', campionati)
 else:
-    st.sidebar.warning("Colonna 'campionato' non trovata.")
+    st.sidebar.warning("Colonna 'league' non trovata. Usare 'campionato' o un altro nome.")
     selected_campionato = 'Tutti'
 
 # Filtro Squadra Home
@@ -76,59 +76,42 @@ else:
 # Filtro Quote
 st.sidebar.subheader("Fasce di Quote")
 
-# Recupera i valori min e max per le quote, gestendo eventuali KeyError
-try:
-    min_odd_home = df_original['odd_home'].min()
-    max_odd_home = df_original['odd_home'].max()
-    odd_home_range = st.sidebar.slider(
-        'Quota Home',
-        float(min_odd_home), float(max_odd_home), (float(min_odd_home), float(max_odd_home)), step=0.01
-    )
+# Input manuale per le quote
+col_odds_1, col_odds_2 = st.sidebar.columns(2)
+with col_odds_1:
+    min_odd_home = st.number_input('Min Quota Home', value=1.01, step=0.01)
+    min_odd_draw = st.number_input('Min Quota Pareggio', value=1.01, step=0.01)
+    min_odd_away = st.number_input('Min Quota Away', value=1.01, step=0.01)
+with col_odds_2:
+    max_odd_home = st.number_input('Max Quota Home', value=50.0, step=0.01)
+    max_odd_draw = st.number_input('Max Quota Pareggio', value=50.0, step=0.01)
+    max_odd_away = st.number_input('Max Quota Away', value=50.0, step=0.01)
 
-    min_odd_draw = df_original['odd_draw'].min()
-    max_odd_draw = df_original['odd_draw'].max()
-    odd_draw_range = st.sidebar.slider(
-        'Quota Pareggio',
-        float(min_odd_draw), float(max_odd_draw), (float(min_odd_draw), float(max_odd_draw)), step=0.01
-    )
-
-    min_odd_away = df_original['odd_away'].min()
-    max_odd_away = df_original['odd_away'].max()
-    odd_away_range = st.sidebar.slider(
-        'Quota Away',
-        float(min_odd_away), float(max_odd_away), (float(min_odd_away), float(max_odd_away)), step=0.01
-    )
-except KeyError:
-    st.sidebar.warning("Non tutte le colonne per le quote sono disponibili. Verificare che siano presenti 'odd_home', 'odd_draw', 'odd_away'.")
-    odd_home_range = (0.0, 100.0)
-    odd_draw_range = (0.0, 100.0)
-    odd_away_range = (0.0, 100.0)
-    
 # --- Applicazione dei filtri ---
 filtered_df = df_original.copy()
 
-if selected_campionato != 'Tutti' and 'campionato' in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df['campionato'] == selected_campionato]
+if selected_campionato != 'Tutti' and 'league' in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df['league'] == selected_campionato]
 if selected_home != 'Tutte' and 'home_team' in filtered_df.columns:
     filtered_df = filtered_df[filtered_df['home_team'] == selected_home]
 if selected_away != 'Tutte' and 'away_team' in filtered_df.columns:
     filtered_df = filtered_df[filtered_df['away_team'] == selected_away]
 
-# Filtro per le quote, gestendo l'assenza delle colonne
+# Filtro per le quote
 if 'odd_home' in filtered_df.columns:
     filtered_df = filtered_df[
-        (filtered_df['odd_home'] >= odd_home_range[0]) & 
-        (filtered_df['odd_home'] <= odd_home_range[1])
+        (filtered_df['odd_home'] >= min_odd_home) & 
+        (filtered_df['odd_home'] <= max_odd_home)
     ]
 if 'odd_draw' in filtered_df.columns:
     filtered_df = filtered_df[
-        (filtered_df['odd_draw'] >= odd_draw_range[0]) & 
-        (filtered_df['odd_draw'] <= odd_draw_range[1])
+        (filtered_df['odd_draw'] >= min_odd_draw) & 
+        (filtered_df['odd_draw'] <= max_odd_draw)
     ]
 if 'odd_away' in filtered_df.columns:
     filtered_df = filtered_df[
-        (filtered_df['odd_away'] >= odd_away_range[0]) & 
-        (filtered_df['odd_away'] <= odd_away_range[1])
+        (filtered_df['odd_away'] >= min_odd_away) & 
+        (filtered_df['odd_away'] <= max_odd_away)
     ]
 
 st.subheader(f"Partite filtrate: {len(filtered_df)} trovate")
@@ -150,8 +133,8 @@ def get_result(row):
     else:
         return 'draw'
 
-def calculate_returns(df, outcome_type):
-    """Calcola i risultati per un dato esito (home, draw, away)."""
+def calculate_returns(df, outcome_type, bet_type):
+    """Calcola i risultati per un dato esito e tipo di scommessa."""
     if df.empty:
         return {
             'Ritorno Punti': 0, 
@@ -164,7 +147,6 @@ def calculate_returns(df, outcome_type):
     total_profit = 0
     total_bets = 0
     
-    # Assumiamo che le colonne esistano dopo la gestione dell'errore iniziale
     odd_col_name = f'odd_{outcome_type}'
     
     for _, row in df.iterrows():
@@ -173,7 +155,7 @@ def calculate_returns(df, outcome_type):
         odd = row[odd_col_name]
         
         # Calcolo per BACK (puntare)
-        if st.session_state.bet_type == 'Back':
+        if bet_type == 'Back':
             if result == outcome_type:
                 wins += 1
                 total_profit += (odd - 1) * stake
@@ -198,51 +180,66 @@ def calculate_returns(df, outcome_type):
         'Odd Minima': odd_minima
     }
 
-# Selezione tipo di scommessa
-st.session_state.bet_type = st.radio(
-    "Scegli il tipo di scommessa:",
-    ('Back', 'Lay'),
-    index=0,
-    format_func=lambda x: "Back (Puntare)" if x == "Back" else "Lay (Bancare)"
-)
-
 # Calcola e mostra i risultati per ogni esito
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-with col1:
-    st.subheader("Esito: Casa Vince (1)")
-    if 'odd_home' in filtered_df.columns:
-        results_home = calculate_returns(filtered_df, 'home')
-        st.metric(label="Ritorno Punti", value=results_home['Ritorno Punti'])
-        st.metric(label="WinRate", value=f"{results_home['WinRate %']}%")
-        st.metric(label="ROI", value=f"{results_home['ROI %']}%")
-        st.metric(label="Odd Minima", value=results_home['Odd Minima'])
-    else:
+if 'odd_home' in filtered_df.columns:
+    with col1:
+        st.subheader("1 (Back)")
+        results = calculate_returns(filtered_df, 'home', 'Back')
+        st.metric("Ritorno Punti", results['Ritorno Punti'])
+        st.metric("WinRate", f"{results['WinRate %']}%")
+        st.metric("ROI", f"{results['ROI %']}%")
+        st.metric("Odd Minima", results['Odd Minima'])
+    with col2:
+        st.subheader("1 (Lay)")
+        results = calculate_returns(filtered_df, 'home', 'Lay')
+        st.metric("Ritorno Punti", results['Ritorno Punti'])
+        st.metric("WinRate", f"{results['WinRate %']}%")
+        st.metric("ROI", f"{results['ROI %']}%")
+        st.metric("Odd Minima", results['Odd Minima'])
+else:
+    with col1:
         st.warning("Colonna 'odd_home' non trovata.")
 
-with col2:
-    st.subheader("Esito: Pareggio (X)")
-    if 'odd_draw' in filtered_df.columns:
-        results_draw = calculate_returns(filtered_df, 'draw')
-        st.metric(label="Ritorno Punti", value=results_draw['Ritorno Punti'])
-        st.metric(label="WinRate", value=f"{results_draw['WinRate %']}%")
-        st.metric(label="ROI", value=f"{results_draw['ROI %']}%")
-        st.metric(label="Odd Minima", value=results_draw['Odd Minima'])
-    else:
+if 'odd_draw' in filtered_df.columns:
+    with col3:
+        st.subheader("X (Back)")
+        results = calculate_returns(filtered_df, 'draw', 'Back')
+        st.metric("Ritorno Punti", results['Ritorno Punti'])
+        st.metric("WinRate", f"{results['WinRate %']}%")
+        st.metric("ROI", f"{results['ROI %']}%")
+        st.metric("Odd Minima", results['Odd Minima'])
+    with col4:
+        st.subheader("X (Lay)")
+        results = calculate_returns(filtered_df, 'draw', 'Lay')
+        st.metric("Ritorno Punti", results['Ritorno Punti'])
+        st.metric("WinRate", f"{results['WinRate %']}%")
+        st.metric("ROI", f"{results['ROI %']}%")
+        st.metric("Odd Minima", results['Odd Minima'])
+else:
+    with col3:
         st.warning("Colonna 'odd_draw' non trovata.")
 
-with col3:
-    st.subheader("Esito: Trasferta Vince (2)")
-    if 'odd_away' in filtered_df.columns:
-        results_away = calculate_returns(filtered_df, 'away')
-        st.metric(label="Ritorno Punti", value=results_away['Ritorno Punti'])
-        st.metric(label="WinRate", value=f"{results_away['WinRate %']}%")
-        st.metric(label="ROI", value=f"{results_away['ROI %']}%")
-        st.metric(label="Odd Minima", value=results_away['Odd Minima'])
-    else:
+if 'odd_away' in filtered_df.columns:
+    with col5:
+        st.subheader("2 (Back)")
+        results = calculate_returns(filtered_df, 'away', 'Back')
+        st.metric("Ritorno Punti", results['Ritorno Punti'])
+        st.metric("WinRate", f"{results['WinRate %']}%")
+        st.metric("ROI", f"{results['ROI %']}%")
+        st.metric("Odd Minima", results['Odd Minima'])
+    with col6:
+        st.subheader("2 (Lay)")
+        results = calculate_returns(filtered_df, 'away', 'Lay')
+        st.metric("Ritorno Punti", results['Ritorno Punti'])
+        st.metric("WinRate", f"{results['WinRate %']}%")
+        st.metric("ROI", f"{results['ROI %']}%")
+        st.metric("Odd Minima", results['Odd Minima'])
+else:
+    with col5:
         st.warning("Colonna 'odd_away' non trovata.")
 
 # --- Dati Filtrati (opzionale) ---
 with st.expander("Mostra Dati Filtrati", expanded=False):
     st.dataframe(filtered_df)
-
