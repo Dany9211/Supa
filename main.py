@@ -50,16 +50,28 @@ except Exception as e:
 st.sidebar.header("Filtri Partite")
 
 # Filtro Campionato
-campionati = ['Tutti'] + sorted(df_original['campionato'].unique().tolist())
-selected_campionato = st.sidebar.selectbox('Seleziona Campionato', campionati)
+if 'campionato' in df_original.columns:
+    campionati = ['Tutti'] + sorted(df_original['campionato'].unique().tolist())
+    selected_campionato = st.sidebar.selectbox('Seleziona Campionato', campionati)
+else:
+    st.sidebar.warning("Colonna 'campionato' non trovata.")
+    selected_campionato = 'Tutti'
 
 # Filtro Squadra Home
-squadre_home = ['Tutte'] + sorted(df_original['home_team'].unique().tolist())
-selected_home = st.sidebar.selectbox('Seleziona Squadra Home', squadre_home)
+if 'home_team' in df_original.columns:
+    squadre_home = ['Tutte'] + sorted(df_original['home_team'].unique().tolist())
+    selected_home = st.sidebar.selectbox('Seleziona Squadra Home', squadre_home)
+else:
+    st.sidebar.warning("Colonna 'home_team' non trovata.")
+    selected_home = 'Tutte'
 
 # Filtro Squadra Away
-squadre_away = ['Tutte'] + sorted(df_original['away_team'].unique().tolist())
-selected_away = st.sidebar.selectbox('Seleziona Squadra Away', squadre_away)
+if 'away_team' in df_original.columns:
+    squadre_away = ['Tutte'] + sorted(df_original['away_team'].unique().tolist())
+    selected_away = st.sidebar.selectbox('Seleziona Squadra Away', squadre_away)
+else:
+    st.sidebar.warning("Colonna 'away_team' non trovata.")
+    selected_away = 'Tutte'
 
 # Filtro Quote
 st.sidebar.subheader("Fasce di Quote")
@@ -95,11 +107,11 @@ except KeyError:
 # --- Applicazione dei filtri ---
 filtered_df = df_original.copy()
 
-if selected_campionato != 'Tutti':
+if selected_campionato != 'Tutti' and 'campionato' in filtered_df.columns:
     filtered_df = filtered_df[filtered_df['campionato'] == selected_campionato]
-if selected_home != 'Tutte':
+if selected_home != 'Tutte' and 'home_team' in filtered_df.columns:
     filtered_df = filtered_df[filtered_df['home_team'] == selected_home]
-if selected_away != 'Tutte':
+if selected_away != 'Tutte' and 'away_team' in filtered_df.columns:
     filtered_df = filtered_df[filtered_df['away_team'] == selected_away]
 
 # Filtro per le quote, gestendo l'assenza delle colonne
