@@ -224,7 +224,22 @@ if 'odd_away' in filtered_df.columns:
 
 if results_data:
     results_df = pd.DataFrame(results_data)
-    st.dataframe(results_df, use_container_width=True)
+    
+    # Funzione per colorare le celle in base al valore
+    def color_positive_negative(val):
+        if isinstance(val, (int, float)):
+            color = 'green' if val > 0 else 'red'
+            return f'color: {color}'
+        return None
+        
+    # Applica la formattazione e lo stile al DataFrame
+    st.dataframe(
+        results_df.style.applymap(
+            color_positive_negative, 
+            subset=['Ritorno Punti', 'ROI %']
+        ), 
+        use_container_width=True
+    )
 else:
     st.warning("Impossibile calcolare i risultati. Assicurati che le colonne delle quote (odd_home, odd_draw, odd_away) siano presenti nel tuo database.")
 
