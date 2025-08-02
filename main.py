@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 
 st.set_page_config(layout="wide")
+st.title("Analizzatore Ritorno Scommesse (Back & Lay)")
 
 # Funzione per connettersi al database e recuperare i dati
 # Utilizza le st.secrets per la connessione sicura
@@ -21,10 +22,9 @@ def run_query():
     df = pd.read_sql('SELECT * FROM "allcamp";', conn)
     conn.close()
     
-    # Pulizia dati: converte le quote in numeri
+    # Pulizia dati: converte le quote in numeri, gestendo la virgola
     for col in ['odd_home', 'odd_draw', 'odd_away']:
         if col in df.columns:
-            # Sostituisce la virgola con il punto e converte in float
             df[col] = pd.to_numeric(
                 df[col].astype(str).str.replace(',', '.'),
                 errors='coerce'
@@ -64,33 +64,33 @@ selected_away = st.sidebar.selectbox('Seleziona Squadra Away', squadre_away)
 # Filtro Quote
 st.sidebar.subheader("Fasce di Quote")
 
-# Recupera i valori min e max per le quote
+# Recupera i valori min e max per le quote, gestendo eventuali KeyError
 try:
     min_odd_home = df_original['odd_home'].min()
     max_odd_home = df_original['odd_home'].max()
     odd_home_range = st.sidebar.slider(
         'Quota Home',
-        min_odd_home, max_odd_home, (min_odd_home, max_odd_home), step=0.01
+        float(min_odd_home), float(max_odd_home), (float(min_odd_home), float(max_odd_home)), step=0.01
     )
 
     min_odd_draw = df_original['odd_draw'].min()
     max_odd_draw = df_original['odd_draw'].max()
     odd_draw_range = st.sidebar.slider(
         'Quota Pareggio',
-        min_odd_draw, max_odd_draw, (min_odd_draw, max_odd_draw), step=0.01
+        float(min_odd_draw), float(max_odd_draw), (float(min_odd_draw), float(max_odd_draw)), step=0.01
     )
 
     min_odd_away = df_original['odd_away'].min()
     max_odd_away = df_original['odd_away'].max()
     odd_away_range = st.sidebar.slider(
         'Quota Away',
-        min_odd_away, max_odd_away, (min_odd_away, max_odd_away), step=0.01
+        float(min_odd_away), float(max_odd_away), (float(min_odd_away), float(max_odd_away)), step=0.01
     )
 except KeyError:
     st.sidebar.warning("Non tutte le colonne per le quote sono disponibili. Verificare che siano presenti 'odd_home', 'odd_draw', 'odd_away'.")
-    odd_home_range = (0,100)
-    odd_draw_range = (0,100)
-    odd_away_range = (0,100)
+    odd_home_range = (0.0, 100.0)
+    odd_draw_range = (0.0, 100.0)
+    odd_away_range = (0.0, 100.0)
     
 # --- Applicazione dei filtri ---
 filtered_df = df_original.copy()
@@ -124,8 +124,6 @@ st.subheader(f"Partite filtrate: {len(filtered_df)} trovate")
 if filtered_df.empty:
     st.warning("Nessuna partita trovata con i filtri selezionati.")
     st.stop()
-    
-st.dataframe(filtered_df)
 
 # --- Calcoli e Analisi Back & Lay ---
 st.header("Analisi Ritorno Economico")
@@ -173,10 +171,10 @@ def calculate_returns(df, outcome_type):
         else: # 'Lay'
             if result != outcome_type:
                 wins += 1
-                total_profit += stake
+                total_profit += (stake / (odd - 1)) if odd > 1 else 0  # Profitto Lay
             else:
-                total_profit -= (odd - 1) * stake
-                
+                total_profit -= stake # Perdita Lay
+
     winrate = (wins / total_bets) * 100 if total_bets > 0 else 0
     roi = (total_profit / (total_bets * stake)) * 100 if total_bets > 0 else 0
     odd_minima = round(100 / winrate, 2) if winrate > 0 else '-'
@@ -191,7 +189,9 @@ def calculate_returns(df, outcome_type):
 # Selezione tipo di scommessa
 st.session_state.bet_type = st.radio(
     "Scegli il tipo di scommessa:",
-    ('Back (Puntare)', 'Lay (Bancare)')
+    ('Back', 'Lay'),
+    index=0,
+    format_func=lambda x: "Back (Puntare)" if x == "Back" else "Lay (Bancare)"
 )
 
 # Calcola e mostra i risultati per ogni esito
