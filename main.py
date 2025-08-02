@@ -1,228 +1,236 @@
 import streamlit as st
+import psycopg2
 import pandas as pd
-from supabase import create_client, Client
 import numpy as np
 
-# --- ISTRUZIONI DI INSTALLAZIONE ---
-# Se riscontri un errore "ModuleNotFoundError", esegui questo comando nel tuo terminale:
-# pip install streamlit supabase pandas
-# --- FINE ISTRUZIONI ---
+st.set_page_config(layout="wide")
 
-# --- CONFIGURAZIONE DEL DATABASE SUPABASE ---
-# I dati di connessione devono essere salvati nel file .streamlit/secrets.toml
-#
-# Esempio di .streamlit/secrets.toml:
-# [supabase]
-# url = "https://<tuo_ID_progetto>.supabase.co"
-# key = "<la_tua_chiave_anon>"
-
-# Configurazione della pagina Streamlit
-st.set_page_config(page_title="Analisi Profittabilità Scommesse", layout="wide")
-st.title("📊 Analisi Scommesse: Back vs Lay")
-st.subheader("Filtra i dati e calcola le metriche di profitto su 1% di stake")
-
-# --- CONNESSIONE E CARICAMENTO DATI DA SUPABASE ---
+# Funzione per connettersi al database e recuperare i dati
+# Utilizza le st.secrets per la connessione sicura
 @st.cache_data
-def init_supabase():
-    """Crea un client Supabase con le credenziali da secrets.toml."""
-    try:
-        url = st.secrets["supabase"]["url"]
-        key = st.secrets["supabase"]["key"]
-        return create_client(url, key)
-    except KeyError as e:
-        st.error(f"Errore: Credenziale Supabase mancante in secrets.toml: {e}")
-        st.stop()
+def run_query():
+    """Connette al database PostgreSQL e carica tutti i dati dalla tabella allcamp."""
+    conn = psycopg2.connect(
+        host=st.secrets["postgres"]["host"],
+        port=st.secrets["postgres"]["port"],
+        dbname=st.secrets["postgres"]["dbname"],
+        user=st.secrets["postgres"]["user"],
+        password=st.secrets["postgres"]["password"],
+        sslmode="require"
+    )
+    df = pd.read_sql('SELECT * FROM "allcamp";', conn)
+    conn.close()
+    
+    # Pulizia dati: converte le quote in numeri
+    for col in ['odd_home', 'odd_draw', 'odd_away']:
+        if col in df.columns:
+            # Sostituisce la virgola con il punto e converte in float
+            df[col] = pd.to_numeric(
+                df[col].astype(str).str.replace(',', '.'),
+                errors='coerce'
+            )
+            
+    # Aggiunge una colonna 'risultato_ft' per comodità
+    if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
+        df['risultato_ft'] = df["gol_home_ft"].astype(str) + "-" + df["gol_away_ft"].astype(str)
+        
+    return df
 
-supabase = init_supabase()
-
-@st.cache_data
-def get_data_from_supabase():
-    """Recupera tutti i dati dalla tabella 'matches' del database Supabase."""
-    try:
-        response = supabase.from_("matches").select("*").execute()
-        return pd.DataFrame(response.data)
-    except Exception as e:
-        st.error(f"Errore durante il recupero dei dati da Supabase: {e}")
-        return pd.DataFrame()
-
-# --- CARICAMENTO E PULIZIA DATI ---
-data_load_state = st.info("Caricamento dati in corso...")
-df = get_data_from_supabase()
-data_load_state.empty()
-
-if df.empty:
-    st.error("Nessun dato trovato. Controlla la connessione al database e il nome della tabella.")
+# --- Caricamento dati ---
+try:
+    with st.spinner('Caricamento dati in corso...'):
+        df_original = run_query()
+    st.success("Dati caricati con successo!")
+    st.write(f"Numero totale di partite nel database: **{len(df_original)}**")
+except Exception as e:
+    st.error(f"Errore nel caricamento dei dati: {e}")
     st.stop()
-
-# Pulizia e conversione dei dati numerici
-required_cols = ["league", "home_team", "away_team", "odd_home", "odd_draw", "odd_away", "gol_home_ft", "gol_away_ft"]
-if not all(col in df.columns for col in required_cols):
-    st.error("Una o più colonne necessarie non sono presenti nel database.")
-    st.info(f"Colonne richieste: {required_cols}")
-    st.stop()
-
-df.dropna(subset=required_cols, inplace=True)
-df.reset_index(drop=True, inplace=True)
-
-for col in ["odd_home", "odd_draw", "odd_away"]:
-    # Sostituisce la virgola con il punto e converte in numerico
-    df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce')
-for col in ["gol_home_ft", "gol_away_ft"]:
-    df[col] = pd.to_numeric(df[col], errors='coerce')
-
-df.dropna(inplace=True)
-
-# --- FUNZIONE DI CALCOLO METRICHE (BACK E LAY) ---
-def calcola_metrica_scommessa(df_matches, bet_type, stake_percent=1):
-    """
-    Calcola le metriche di profitto (Winrate, Odd Breakeven, Ritorno Punti, ROI)
-    per un determinato tipo di scommessa (Home, Draw, Away) e una stake fissa.
-    """
-    if df_matches.empty:
-        return {
-            "back_winrate": 0, "back_odd_breakeven": 0, "back_points": 0, "back_roi": 0,
-            "lay_winrate": 0, "lay_odd_breakeven": 0, "lay_points": 0, "lay_roi": 0
-        }
-
-    total_bets = len(df_matches)
-    # 1% di stake = 1 punto, quindi stake_percent è l'unità di misura.
-    stake_unit = stake_percent
     
-    odds_col = f"odd_{bet_type}"
+# --- Sidebar per i filtri ---
+st.sidebar.header("Filtri Partite")
+
+# Filtro Campionato
+campionati = ['Tutti'] + sorted(df_original['campionato'].unique().tolist())
+selected_campionato = st.sidebar.selectbox('Seleziona Campionato', campionati)
+
+# Filtro Squadra Home
+squadre_home = ['Tutte'] + sorted(df_original['home_team'].unique().tolist())
+selected_home = st.sidebar.selectbox('Seleziona Squadra Home', squadre_home)
+
+# Filtro Squadra Away
+squadre_away = ['Tutte'] + sorted(df_original['away_team'].unique().tolist())
+selected_away = st.sidebar.selectbox('Seleziona Squadra Away', squadre_away)
+
+# Filtro Quote
+st.sidebar.subheader("Fasce di Quote")
+
+# Recupera i valori min e max per le quote
+try:
+    min_odd_home = df_original['odd_home'].min()
+    max_odd_home = df_original['odd_home'].max()
+    odd_home_range = st.sidebar.slider(
+        'Quota Home',
+        min_odd_home, max_odd_home, (min_odd_home, max_odd_home), step=0.01
+    )
+
+    min_odd_draw = df_original['odd_draw'].min()
+    max_odd_draw = df_original['odd_draw'].max()
+    odd_draw_range = st.sidebar.slider(
+        'Quota Pareggio',
+        min_odd_draw, max_odd_draw, (min_odd_draw, max_odd_draw), step=0.01
+    )
+
+    min_odd_away = df_original['odd_away'].min()
+    max_odd_away = df_original['odd_away'].max()
+    odd_away_range = st.sidebar.slider(
+        'Quota Away',
+        min_odd_away, max_odd_away, (min_odd_away, max_odd_away), step=0.01
+    )
+except KeyError:
+    st.sidebar.warning("Non tutte le colonne per le quote sono disponibili. Verificare che siano presenti 'odd_home', 'odd_draw', 'odd_away'.")
+    odd_home_range = (0,100)
+    odd_draw_range = (0,100)
+    odd_away_range = (0,100)
     
-    # Condizione di vittoria per il 'Back' (puntare)
-    if bet_type == "home":
-        back_win_condition = df_matches["gol_home_ft"] > df_matches["gol_away_ft"]
-    elif bet_type == "draw":
-        back_win_condition = df_matches["gol_home_ft"] == df_matches["gol_away_ft"]
-    else: # away
-        back_win_condition = df_matches["gol_home_ft"] < df_matches["gol_away_ft"]
+# --- Applicazione dei filtri ---
+filtered_df = df_original.copy()
 
-    # Calcoli per il "Back"
-    back_wins = back_win_condition.sum()
-    back_winrate = (back_wins / total_bets) * 100 if total_bets > 0 else 0
-    back_odd_breakeven = 100 / back_winrate if back_winrate > 0 else 0
-    
-    # Calcolo del ritorno in punti (Punti guadagnati se vinci, -1 se perdi)
-    back_profits = np.where(back_win_condition, (df_matches[odds_col] - 1) * stake_unit, -stake_unit)
-    back_points_return = back_profits.sum()
-    back_roi = (back_points_return / (total_bets * stake_unit)) * 100 if total_bets > 0 else 0
+if selected_campionato != 'Tutti':
+    filtered_df = filtered_df[filtered_df['campionato'] == selected_campionato]
+if selected_home != 'Tutte':
+    filtered_df = filtered_df[filtered_df['home_team'] == selected_home]
+if selected_away != 'Tutte':
+    filtered_df = filtered_df[filtered_df['away_team'] == selected_away]
 
-    # Calcoli per il "Lay" (bancare)
-    lay_win_condition = ~back_win_condition
-    lay_wins = lay_win_condition.sum()
-    lay_winrate = (lay_wins / total_bets) * 100 if total_bets > 0 else 0
-    lay_odd_breakeven = 100 / lay_winrate if lay_winrate > 0 else 0
-    
-    # Calcolo del ritorno in punti (Punti guadagnati se vinci, -quota se perdi)
-    lay_profits = np.where(lay_win_condition, stake_unit, - (df_matches[odds_col] - 1) * stake_unit)
-    lay_points_return = lay_profits.sum()
-    lay_roi = (lay_points_return / (total_bets * stake_unit)) * 100 if total_bets > 0 else 0
-    
-    return {
-        "back_winrate": back_winrate, "back_odd_breakeven": back_odd_breakeven, 
-        "back_points": back_points_return, "back_roi": back_roi,
-        "lay_winrate": lay_winrate, "lay_odd_breakeven": lay_odd_breakeven, 
-        "lay_points": lay_points_return, "lay_roi": lay_roi
-    }
+# Filtro per le quote, gestendo l'assenza delle colonne
+if 'odd_home' in filtered_df.columns:
+    filtered_df = filtered_df[
+        (filtered_df['odd_home'] >= odd_home_range[0]) & 
+        (filtered_df['odd_home'] <= odd_home_range[1])
+    ]
+if 'odd_draw' in filtered_df.columns:
+    filtered_df = filtered_df[
+        (filtered_df['odd_draw'] >= odd_draw_range[0]) & 
+        (filtered_df['odd_draw'] <= odd_draw_range[1])
+    ]
+if 'odd_away' in filtered_df.columns:
+    filtered_df = filtered_df[
+        (filtered_df['odd_away'] >= odd_away_range[0]) & 
+        (filtered_df['odd_away'] <= odd_away_range[1])
+    ]
 
-# --- FILTRI NELLA SIDEBAR ---
-st.sidebar.header("Filtri")
-st.sidebar.info(f"Partite totali nel database: {len(df)}")
-
-# Filtri Campionato, Squadra Home, Squadra Away
-leagues = sorted(df["league"].unique())
-selected_leagues = st.sidebar.multiselect("Seleziona Campionato", leagues, default=leagues)
-
-home_teams = sorted(df["home_team"].unique())
-selected_home_teams = st.sidebar.multiselect("Seleziona Squadra Home", home_teams)
-
-away_teams = sorted(df["away_team"].unique())
-selected_away_teams = st.sidebar.multiselect("Seleziona Squadra Away", away_teams)
-
-# Filtri quote con slider
-st.sidebar.subheader("Fascia di Quote")
-min_home_odd, max_home_odd = st.sidebar.slider("Quote Home", min_value=1.0, max_value=20.0, value=(1.0, 20.0), step=0.1)
-min_draw_odd, max_draw_odd = st.sidebar.slider("Quote Pareggio", min_value=1.0, max_value=20.0, value=(1.0, 20.0), step=0.1)
-min_away_odd, max_away_odd = st.sidebar.slider("Quote Away", min_value=1.0, max_value=20.0, value=(1.0, 20.0), step=0.1)
-
-# --- APPLICAZIONE DEI FILTRI ---
-filtered_df = df[
-    (df["league"].isin(selected_leagues)) &
-    (df["odd_home"] >= min_home_odd) & (df["odd_home"] <= max_home_odd) &
-    (df["odd_draw"] >= min_draw_odd) & (df["odd_draw"] <= max_draw_odd) &
-    (df["odd_away"] >= min_away_odd) & (df["odd_away"] <= max_away_odd)
-]
-
-if selected_home_teams:
-    filtered_df = filtered_df[filtered_df["home_team"].isin(selected_home_teams)]
-if selected_away_teams:
-    filtered_df = filtered_df[filtered_df["away_team"].isin(selected_away_teams)]
-
-# --- VISUALIZZAZIONE RISULTATI ---
-st.subheader(f"Risultati per {len(filtered_df)} partite filtrate")
+st.subheader(f"Partite filtrate: {len(filtered_df)} trovate")
 
 if filtered_df.empty:
-    st.warning("Nessuna partita trovata con i filtri selezionati. Prova a modificare i filtri.")
+    st.warning("Nessuna partita trovata con i filtri selezionati.")
     st.stop()
+    
+st.dataframe(filtered_df)
 
-home_metrics = calcola_metrica_scommessa(filtered_df, 'home')
-draw_metrics = calcola_metrica_scommessa(filtered_df, 'draw')
-away_metrics = calcola_metrica_scommessa(filtered_df, 'away')
+# --- Calcoli e Analisi Back & Lay ---
+st.header("Analisi Ritorno Economico")
+stake = 1.0 # 1 punto = 1% dello stake totale
 
-# Sezione "Puntare" (Back)
-st.header("📈 Analisi 'Puntare' (Back)")
+def get_result(row):
+    """Determina il risultato della partita."""
+    if row['gol_home_ft'] > row['gol_away_ft']:
+        return 'home'
+    elif row['gol_home_ft'] < row['gol_away_ft']:
+        return 'away'
+    else:
+        return 'draw'
+
+def calculate_returns(df, outcome_type):
+    """Calcola i risultati per un dato esito (home, draw, away)."""
+    if df.empty:
+        return {
+            'Ritorno Punti': 0, 
+            'WinRate %': 0, 
+            'ROI %': 0, 
+            'Odd Minima': '-'
+        }
+        
+    wins = 0
+    total_profit = 0
+    total_bets = 0
+    
+    # Assumiamo che le colonne esistano dopo la gestione dell'errore iniziale
+    odd_col_name = f'odd_{outcome_type}'
+    
+    for _, row in df.iterrows():
+        total_bets += 1
+        result = get_result(row)
+        odd = row[odd_col_name]
+        
+        # Calcolo per BACK (puntare)
+        if st.session_state.bet_type == 'Back':
+            if result == outcome_type:
+                wins += 1
+                total_profit += (odd - 1) * stake
+            else:
+                total_profit -= stake
+        # Calcolo per LAY (bancare)
+        else: # 'Lay'
+            if result != outcome_type:
+                wins += 1
+                total_profit += stake
+            else:
+                total_profit -= (odd - 1) * stake
+                
+    winrate = (wins / total_bets) * 100 if total_bets > 0 else 0
+    roi = (total_profit / (total_bets * stake)) * 100 if total_bets > 0 else 0
+    odd_minima = round(100 / winrate, 2) if winrate > 0 else '-'
+
+    return {
+        'Ritorno Punti': round(total_profit, 2),
+        'WinRate %': round(winrate, 2),
+        'ROI %': round(roi, 2),
+        'Odd Minima': odd_minima
+    }
+
+# Selezione tipo di scommessa
+st.session_state.bet_type = st.radio(
+    "Scegli il tipo di scommessa:",
+    ('Back (Puntare)', 'Lay (Bancare)')
+)
+
+# Calcola e mostra i risultati per ogni esito
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.subheader("Home")
-    st.metric("Winrate", f"{home_metrics['back_winrate']:.2f}%")
-    st.metric("Odd minima (breakeven)", f"{home_metrics['back_odd_breakeven']:.2f}")
-    st.metric("Ritorno (Points)", f"{home_metrics['back_points']:.2f}")
-    st.metric("ROI", f"{home_metrics['back_roi']:.2f}%")
-    
-with col2:
-    st.subheader("Pareggio")
-    st.metric("Winrate", f"{draw_metrics['back_winrate']:.2f}%")
-    st.metric("Odd minima (breakeven)", f"{draw_metrics['back_odd_breakeven']:.2f}")
-    st.metric("Ritorno (Points)", f"{draw_metrics['back_points']:.2f}")
-    st.metric("ROI", f"{draw_metrics['back_roi']:.2f}%")
-
-with col3:
-    st.subheader("Away")
-    st.metric("Winrate", f"{away_metrics['back_winrate']:.2f}%")
-    st.metric("Odd minima (breakeven)", f"{away_metrics['back_odd_breakeven']:.2f}")
-    st.metric("Ritorno (Points)", f"{away_metrics['back_points']:.2f}")
-    st.metric("ROI", f"{away_metrics['back_roi']:.2f}%")
-    
-st.markdown("---")
-
-# Sezione "Bancare" (Lay)
-st.header("📉 Analisi 'Bancare' (Lay)")
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.subheader("Lay Home")
-    st.metric("Winrate", f"{home_metrics['lay_winrate']:.2f}%")
-    st.metric("Odd minima (breakeven)", f"{home_metrics['lay_odd_breakeven']:.2f}")
-    st.metric("Ritorno (Points)", f"{home_metrics['lay_points']:.2f}")
-    st.metric("ROI", f"{home_metrics['lay_roi']:.2f}%")
+    st.subheader("Esito: Casa Vince (1)")
+    if 'odd_home' in filtered_df.columns:
+        results_home = calculate_returns(filtered_df, 'home')
+        st.metric(label="Ritorno Punti", value=results_home['Ritorno Punti'])
+        st.metric(label="WinRate", value=f"{results_home['WinRate %']}%")
+        st.metric(label="ROI", value=f"{results_home['ROI %']}%")
+        st.metric(label="Odd Minima", value=results_home['Odd Minima'])
+    else:
+        st.warning("Colonna 'odd_home' non trovata.")
 
 with col2:
-    st.subheader("Lay Pareggio")
-    st.metric("Winrate", f"{draw_metrics['lay_winrate']:.2f}%")
-    st.metric("Odd minima (breakeven)", f"{draw_metrics['lay_odd_breakeven']:.2f}")
-    st.metric("Ritorno (Points)", f"{draw_metrics['lay_points']:.2f}")
-    st.metric("ROI", f"{draw_metrics['lay_roi']:.2f}%")
+    st.subheader("Esito: Pareggio (X)")
+    if 'odd_draw' in filtered_df.columns:
+        results_draw = calculate_returns(filtered_df, 'draw')
+        st.metric(label="Ritorno Punti", value=results_draw['Ritorno Punti'])
+        st.metric(label="WinRate", value=f"{results_draw['WinRate %']}%")
+        st.metric(label="ROI", value=f"{results_draw['ROI %']}%")
+        st.metric(label="Odd Minima", value=results_draw['Odd Minima'])
+    else:
+        st.warning("Colonna 'odd_draw' non trovata.")
 
 with col3:
-    st.subheader("Lay Away")
-    st.metric("Winrate", f"{away_metrics['lay_winrate']:.2f}%")
-    st.metric("Odd minima (breakeven)", f"{away_metrics['lay_odd_breakeven']:.2f}")
-    st.metric("Ritorno (Points)", f"{away_metrics['lay_points']:.2f}")
-    st.metric("ROI", f"{away_metrics['lay_roi']:.2f}%")
+    st.subheader("Esito: Trasferta Vince (2)")
+    if 'odd_away' in filtered_df.columns:
+        results_away = calculate_returns(filtered_df, 'away')
+        st.metric(label="Ritorno Punti", value=results_away['Ritorno Punti'])
+        st.metric(label="WinRate", value=f"{results_away['WinRate %']}%")
+        st.metric(label="ROI", value=f"{results_away['ROI %']}%")
+        st.metric(label="Odd Minima", value=results_away['Odd Minima'])
+    else:
+        st.warning("Colonna 'odd_away' non trovata.")
 
-st.markdown("---")
-if st.checkbox("Mostra partite filtrate"):
+# --- Dati Filtrati (opzionale) ---
+with st.expander("Mostra Dati Filtrati", expanded=False):
     st.dataframe(filtered_df)
 
