@@ -110,16 +110,15 @@ def color_positive_negative(val):
         return f'color: {color}'
     return None
     
-# --- Nuova funzione per lo stile del DataFrame con MultiIndex ---
+# --- Nuova funzione per lo stile del DataFrame con MultiIndex (non più usata, ma tenuta per riferimento) ---
 def style_multiindex_df(df):
     """
     Genera un DataFrame di stili per colorare 'Pts' e 'Roi' di un MultiIndex DataFrame.
+    NOTA: Questa funzione non viene più utilizzata per evitare l'errore di indicizzazione.
     """
-    # Crea un DataFrame della stessa forma per contenere le stringhe di stile
     color_df = pd.DataFrame('', index=df.index, columns=df.columns)
     
     for col in df.columns:
-        # Controlla se l'ultimo elemento della tupla del nome della colonna è 'Pts' o 'Roi'
         if isinstance(col, tuple) and col[-1] in ['Pts', 'Roi']:
             color_df[col] = df[col].apply(lambda x: 'color: green;' if x > 0 else 'color: red;')
             
@@ -345,8 +344,19 @@ if selected_away != 'Tutte':
 if results_data_specific:
     results_df = pd.DataFrame(results_data_specific).set_index('Label')
     
+    # Appiattimento delle colonne del MultiIndex per evitare l'errore
+    results_df.columns = results_df.columns.map(lambda col: ' - '.join(c for c in col if c != ''))
+
+    # Funzione di stile per le colonne appiattite
+    def style_flat_df(df):
+        return pd.DataFrame(
+            [['color: green;' if 'Pts' in c or 'Roi' in c and x > 0 else 'color: red;' if 'Pts' in c or 'Roi' in c and x < 0 else '' for c, x in r.items()] for _, r in df.iterrows()],
+            index=df.index,
+            columns=df.columns
+        )
+
     # Applica lo stile utilizzando la nuova funzione
-    styled_df = results_df.style.apply(style_multiindex_df, axis=None)
+    styled_df = results_df.style.apply(style_flat_df, axis=None)
     
     st.dataframe(styled_df, use_container_width=True)
 else:
