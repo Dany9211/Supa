@@ -32,7 +32,7 @@ def run_query():
             
     # Aggiunge una colonna 'risultato_ft' per comodità
     if "gol_home_ft" in df.columns and "gol_away_ft" in df.columns:
-        df['risultato_ft'] = df["gol_home_ft"].astype(str) + "-" + df["gol_home_ft"].astype(str)
+        df['risultato_ft'] = df["gol_home_ft"].astype(str) + "-" + df["gol_away_ft"].astype(str)
         
     return df
 
@@ -150,10 +150,10 @@ with col_odds_2:
 
 st.markdown("---")
 # ==============================================================================
-# --- SEZIONE UNICA: Analisi Ritorni Back & Lay ---
+# --- SEZIONE 1: ANALISI GENERALE ---
 # ==============================================================================
-st.header("Analisi Ritorno per Squadra")
-st.write("Dati filtrati in base ai parametri impostati nella sidebar.")
+st.header("1. Analisi Generale")
+st.write("Analisi dei ritorni per tutte le partite che soddisfano i filtri della sidebar.")
 
 # Applicazione dei filtri
 filtered_df = df_original.copy()
@@ -170,8 +170,40 @@ if 'odd_draw' in filtered_df.columns:
 if 'odd_away' in filtered_df.columns:
     filtered_df = filtered_df[(filtered_df['odd_away'] >= min_odd_away) & (filtered_df['odd_away'] <= max_odd_away)]
 
+st.subheader(f"Partite filtrate: {len(filtered_df)} trovate")
+
 if filtered_df.empty:
     st.warning("Nessuna partita trovata con i filtri selezionati.")
+else:
+    results_data_general = []
+    if 'odd_home' in filtered_df.columns:
+        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'home', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'home', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'home', 'Back')['Roi']})
+        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'home', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'home', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'home', 'Lay')['Roi']})
+    if 'odd_draw' in filtered_df.columns:
+        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'draw', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'draw', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'draw', 'Back')['Roi']})
+        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'draw', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'draw', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'draw', 'Lay')['Roi']})
+    if 'odd_away' in filtered_df.columns:
+        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'away', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'away', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'away', 'Back')['Roi']})
+        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'away', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'away', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'away', 'Lay')['Roi']})
+
+    if results_data_general:
+        results_df_general = pd.DataFrame(results_data_general)
+        st.dataframe(results_df_general.style.applymap(color_positive_negative, subset=['Ritorno Punti', 'ROI %']), use_container_width=True)
+    else:
+        st.warning("Impossibile calcolare i risultati. Verificare le colonne del database.")
+        
+with st.expander("Mostra Dati Filtrati", expanded=False):
+    st.dataframe(filtered_df)
+
+st.markdown("---")
+# ==============================================================================
+# --- SEZIONE 2: Analisi per Squadra ---
+# ==============================================================================
+st.header("2. Analisi Ritorno per Squadra")
+st.write("Rendimento di ogni singola squadra nel dataset filtrato.")
+
+if filtered_df.empty:
+    st.info("Nessuna squadra da analizzare con i filtri selezionati.")
 else:
     # Ottieni tutte le squadre uniche presenti nel DataFrame filtrato
     all_teams_filtered = sorted(list(set(filtered_df['home_team'].unique()).union(filtered_df['away_team'].unique())))
@@ -245,7 +277,4 @@ else:
         styled_df = results_df.style.applymap(color_positive_negative, subset=pd.IndexSlice[:, pd.IndexSlice[:, ['Pts', 'Roi']]])
         st.dataframe(styled_df, use_container_width=True)
     else:
-        st.info("Nessuna partita trovata per i filtri selezionati.")
-
-with st.expander("Mostra Dati Filtrati", expanded=False):
-    st.dataframe(filtered_df)
+        st.info("Nessuna squadra da analizzare con i filtri selezionati.")
