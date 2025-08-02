@@ -150,41 +150,37 @@ with col_odds_2:
 
 st.markdown("---")
 # ==============================================================================
-# --- SEZIONE 1: ANALISI GENERALE ---
+# --- SEZIONE 1: ANALISI GENERALE (IGNORA FILTRI SQUADRA) ---
 # ==============================================================================
 st.header("1. Analisi Generale")
-st.write("Analisi dei ritorni per tutte le partite che soddisfano i filtri della sidebar.")
+st.write("Analisi dei ritorni per tutte le partite che soddisfano i filtri di Campionato e Quote.")
 
-# Applicazione dei filtri
-filtered_df = df_original.copy()
-if selected_campionato != 'Tutti' and 'league' in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df['league'] == selected_campionato]
-if selected_home != 'Tutte' and 'home_team' in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df['home_team'] == selected_home]
-if selected_away != 'Tutte' and 'away_team' in filtered_df.columns:
-    filtered_df = filtered_df[filtered_df['away_team'] == selected_away]
-if 'odd_home' in filtered_df.columns:
-    filtered_df = filtered_df[(filtered_df['odd_home'] >= min_odd_home) & (filtered_df['odd_home'] <= max_odd_home)]
-if 'odd_draw' in filtered_df.columns:
-    filtered_df = filtered_df[(filtered_df['odd_draw'] >= min_odd_draw) & (filtered_df['odd_draw'] <= max_odd_draw)]
-if 'odd_away' in filtered_df.columns:
-    filtered_df = filtered_df[(filtered_df['odd_away'] >= min_odd_away) & (filtered_df['odd_away'] <= max_odd_away)]
+# Applicazione dei filtri per l'analisi generale (senza filtri squadra)
+filtered_df_general = df_original.copy()
+if selected_campionato != 'Tutti' and 'league' in filtered_df_general.columns:
+    filtered_df_general = filtered_df_general[filtered_df_general['league'] == selected_campionato]
+if 'odd_home' in filtered_df_general.columns:
+    filtered_df_general = filtered_df_general[(filtered_df_general['odd_home'] >= min_odd_home) & (filtered_df_general['odd_home'] <= max_odd_home)]
+if 'odd_draw' in filtered_df_general.columns:
+    filtered_df_general = filtered_df_general[(filtered_df_general['odd_draw'] >= min_odd_draw) & (filtered_df_general['odd_draw'] <= max_odd_draw)]
+if 'odd_away' in filtered_df_general.columns:
+    filtered_df_general = filtered_df_general[(filtered_df_general['odd_away'] >= min_odd_away) & (filtered_df_general['odd_away'] <= max_odd_away)]
 
-st.subheader(f"Partite filtrate: {len(filtered_df)} trovate")
+st.subheader(f"Partite filtrate: {len(filtered_df_general)} trovate")
 
-if filtered_df.empty:
-    st.warning("Nessuna partita trovata con i filtri selezionati.")
+if filtered_df_general.empty:
+    st.warning("Nessuna partita trovata con i filtri di Campionato e Quote selezionati.")
 else:
     results_data_general = []
-    if 'odd_home' in filtered_df.columns:
-        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'home', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'home', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'home', 'Back')['Roi']})
-        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'home', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'home', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'home', 'Lay')['Roi']})
-    if 'odd_draw' in filtered_df.columns:
-        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'draw', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'draw', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'draw', 'Back')['Roi']})
-        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'draw', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'draw', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'draw', 'Lay')['Roi']})
-    if 'odd_away' in filtered_df.columns:
-        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df, 'away', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'away', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df, 'away', 'Back')['Roi']})
-        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df, 'away', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df, 'away', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df, 'away', 'Lay')['Roi']})
+    if 'odd_home' in filtered_df_general.columns:
+        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df_general, 'home', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df_general, 'home', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df_general, 'home', 'Back')['Roi']})
+        results_data_general.append({"Esito": "1 (Casa)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df_general, 'home', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df_general, 'home', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df_general, 'home', 'Lay')['Roi']})
+    if 'odd_draw' in filtered_df_general.columns:
+        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df_general, 'draw', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df_general, 'draw', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df_general, 'draw', 'Back')['Roi']})
+        results_data_general.append({"Esito": "X (Pareggio)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df_general, 'draw', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df_general, 'draw', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df_general, 'draw', 'Lay')['Roi']})
+    if 'odd_away' in filtered_df_general.columns:
+        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Back", 'Ritorno Punti': calculate_returns(filtered_df_general, 'away', 'Back')['Pts'], 'WinRate %': calculate_returns(filtered_df_general, 'away', 'Back')['Win%'], 'ROI %': calculate_returns(filtered_df_general, 'away', 'Back')['Roi']})
+        results_data_general.append({"Esito": "2 (Trasferta)", "Tipo Scommessa": "Lay", 'Ritorno Punti': calculate_returns(filtered_df_general, 'away', 'Lay')['Pts'], 'WinRate %': calculate_returns(filtered_df_general, 'away', 'Lay')['Win%'], 'ROI %': calculate_returns(filtered_df_general, 'away', 'Lay')['Roi']})
 
     if results_data_general:
         results_df_general = pd.DataFrame(results_data_general)
@@ -193,29 +189,45 @@ else:
         st.warning("Impossibile calcolare i risultati. Verificare le colonne del database.")
         
 with st.expander("Mostra Dati Filtrati", expanded=False):
-    st.dataframe(filtered_df)
+    st.dataframe(filtered_df_general)
 
 st.markdown("---")
 # ==============================================================================
-# --- SEZIONE 2: Analisi per Squadra ---
+# --- SEZIONE 2: Analisi per Squadra (USA TUTTI I FILTRI) ---
 # ==============================================================================
 st.header("2. Analisi Ritorno per Squadra")
 st.write("Rendimento di ogni singola squadra nel dataset filtrato.")
 
-if filtered_df.empty:
+# Applicazione di tutti i filtri per l'analisi per squadra
+filtered_df_teams = df_original.copy()
+if selected_campionato != 'Tutti' and 'league' in filtered_df_teams.columns:
+    filtered_df_teams = filtered_df_teams[filtered_df_teams['league'] == selected_campionato]
+if selected_home != 'Tutte' and 'home_team' in filtered_df_teams.columns:
+    filtered_df_teams = filtered_df_teams[filtered_df_teams['home_team'] == selected_home]
+if selected_away != 'Tutte' and 'away_team' in filtered_df_teams.columns:
+    filtered_df_teams = filtered_df_teams[filtered_df_teams['away_team'] == selected_away]
+if 'odd_home' in filtered_df_teams.columns:
+    filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_home'] >= min_odd_home) & (filtered_df_teams['odd_home'] <= max_odd_home)]
+if 'odd_draw' in filtered_df_teams.columns:
+    filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_draw'] >= min_odd_draw) & (filtered_df_teams['odd_draw'] <= max_odd_draw)]
+if 'odd_away' in filtered_df_teams.columns:
+    filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_away'] >= min_odd_away) & (filtered_df_teams['odd_away'] <= max_odd_away)]
+
+
+if filtered_df_teams.empty:
     st.info("Nessuna squadra da analizzare con i filtri selezionati.")
 else:
     # Ottieni tutte le squadre uniche presenti nel DataFrame filtrato
-    all_teams_filtered = sorted(list(set(filtered_df['home_team'].unique()).union(filtered_df['away_team'].unique())))
+    all_teams_filtered = sorted(list(set(filtered_df_teams['home_team'].unique()).union(filtered_df_teams['away_team'].unique())))
     
     results_data_specific = []
     
     # Cicla su ogni squadra per calcolare i ritorni
     for team in all_teams_filtered:
         # Filtra le partite in cui la squadra gioca in casa
-        df_home_matches = filtered_df[filtered_df['home_team'] == team]
+        df_home_matches = filtered_df_teams[filtered_df_teams['home_team'] == team]
         # Filtra le partite in cui la squadra gioca in trasferta
-        df_away_matches = filtered_df[filtered_df['away_team'] == team]
+        df_away_matches = filtered_df_teams[filtered_df_teams['away_team'] == team]
         
         # Calcola il numero totale di partite per la squadra
         total_matches = len(df_home_matches) + len(df_away_matches)
@@ -225,8 +237,8 @@ else:
             home_back_results = calculate_returns(df_home_matches, 'home', 'Back')
             home_lay_results = calculate_returns(df_home_matches, 'home', 'Lay')
             
-            draw_back_results = calculate_returns(filtered_df[(filtered_df['home_team'] == team) | (filtered_df['away_team'] == team)], 'draw', 'Back')
-            draw_lay_results = calculate_returns(filtered_df[(filtered_df['home_team'] == team) | (filtered_df['away_team'] == team)], 'draw', 'Lay')
+            draw_back_results = calculate_returns(filtered_df_teams[(filtered_df_teams['home_team'] == team) | (filtered_df_teams['away_team'] == team)], 'draw', 'Back')
+            draw_lay_results = calculate_returns(filtered_df_teams[(filtered_df_teams['home_team'] == team) | (filtered_df_teams['away_team'] == team)], 'draw', 'Lay')
             
             away_back_results = calculate_returns(df_away_matches, 'away', 'Back')
             away_lay_results = calculate_returns(df_away_matches, 'away', 'Lay')
