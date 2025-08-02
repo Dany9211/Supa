@@ -253,7 +253,6 @@ else:
             # Costruisci la riga per la tabella con tuple come chiavi per un MultiIndex uniforme
             row_data = {
                 'Label': team,
-                # La chiave è ora una tupla a 3 livelli per coerenza con le altre colonne
                 ('Matches', '', 'Total'): total_matches,
                 ('Home', 'Back', 'Win%'): home_back_results['Win%'],
                 ('Home', 'Back', 'Pts'): home_back_results['Pts'],
@@ -282,8 +281,12 @@ else:
         # Creazione del DataFrame con MultiIndex automatico dalle chiavi a tuple
         results_df = pd.DataFrame(results_data_specific).set_index('Label')
         
+        # Creazione di una lista di tuple per le colonne da formattare
+        # Questo approccio evita l'errore di indicizzazione
+        cols_to_style = [col for col in results_df.columns if col[2] in ['Pts', 'Roi']]
+        
         # Applica la formattazione e visualizza la tabella
-        styled_df = results_df.style.applymap(color_positive_negative, subset=pd.IndexSlice[:, :, ['Pts', 'Roi']])
+        styled_df = results_df.style.applymap(color_positive_negative, subset=cols_to_style)
         st.dataframe(styled_df, use_container_width=True)
     else:
         st.info("Nessuna squadra da analizzare con i filtri selezionati.")
