@@ -198,20 +198,27 @@ st.markdown("---")
 st.header("2. Analisi Ritorno per Squadra")
 st.write("Rendimento di ogni singola squadra nel dataset filtrato.")
 
-# Applicazione di tutti i filtri per l'analisi per squadra
+# Applicazione dei filtri di campionato e quote per l'analisi per squadra
 filtered_df_teams = df_original.copy()
 if selected_campionato != 'Tutti' and 'league' in filtered_df_teams.columns:
     filtered_df_teams = filtered_df_teams[filtered_df_teams['league'] == selected_campionato]
-if selected_home != 'Tutte' and 'home_team' in filtered_df_teams.columns:
-    filtered_df_teams = filtered_df_teams[filtered_df_teams['home_team'] == selected_home]
-if selected_away != 'Tutte' and 'away_team' in filtered_df_teams.columns:
-    filtered_df_teams = filtered_df_teams[filtered_df_teams['away_team'] == selected_away]
 if 'odd_home' in filtered_df_teams.columns:
     filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_home'] >= min_odd_home) & (filtered_df_teams['odd_home'] <= max_odd_home)]
 if 'odd_draw' in filtered_df_teams.columns:
     filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_draw'] >= min_odd_draw) & (filtered_df_teams['odd_draw'] <= max_odd_draw)]
 if 'odd_away' in filtered_df_teams.columns:
     filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_away'] >= min_odd_away) & (filtered_df_teams['odd_away'] <= max_odd_away)]
+
+# Applica i filtri delle squadre con la logica corretta (OR)
+if selected_home != 'Tutte' and selected_away != 'Tutte':
+    filtered_df_teams = filtered_df_teams[
+        (filtered_df_teams['home_team'] == selected_home) | 
+        (filtered_df_teams['away_team'] == selected_away)
+    ]
+elif selected_home != 'Tutte':
+    filtered_df_teams = filtered_df_teams[filtered_df_teams['home_team'] == selected_home]
+elif selected_away != 'Tutte':
+    filtered_df_teams = filtered_df_teams[filtered_df_teams['away_team'] == selected_away]
 
 
 if filtered_df_teams.empty:
