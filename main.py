@@ -320,8 +320,10 @@ if selected_away != 'Tutte':
 
 if results_data_specific:
     results_df = pd.DataFrame(results_data_specific).set_index('Label')
+    # Uso di pd.IndexSlice per specificare il subset di colonne per la colorazione
+    idx = pd.IndexSlice
     cols_to_style = [col for col in results_df.columns if col[2] in ['Pts', 'Roi']]
-    styled_df = results_df.style.applymap(color_positive_negative, subset=cols_to_style)
+    styled_df = results_df.style.applymap(color_positive_negative, subset=idx[:, cols_to_style])
     st.dataframe(styled_df, use_container_width=True)
 else:
     st.info("Nessuna squadra da analizzare con i filtri selezionati.")
