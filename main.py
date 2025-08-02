@@ -204,6 +204,8 @@ if selected_campionato != 'Tutti' and 'league' in filtered_df_teams.columns:
     filtered_df_teams = filtered_df_teams[filtered_df_teams['league'] == selected_campionato]
 
 # Determina quale filtro quote usare come principale
+# Questo flag è il punto chiave della nuova logica.
+# Se le quote away sono state modificate, usiamo quelle come filtro principale.
 use_away_odd_filter = (min_odd_away != 1.01) or (max_odd_away != 50.0)
 
 results_data_specific = []
@@ -213,19 +215,21 @@ if selected_home != 'Tutte':
     df_home_matches = filtered_df_teams[filtered_df_teams['home_team'] == selected_home].copy()
     
     if use_away_odd_filter:
-        # Applica il filtro della quota away dell'avversario
+        # Se il filtro principale è Quota Away, filtriamo le partite della squadra di casa
+        # in base alla Quota Away dell'avversario.
         df_home_matches = df_home_matches[
             (df_home_matches['odd_away'] >= min_odd_away) &
             (df_home_matches['odd_away'] <= max_odd_away)
         ]
     else:
-        # Logica predefinita: usa il filtro della quota home della squadra stessa
+        # Se il filtro principale è Quota Home (default), filtriamo in base
+        # alla Quota Home della squadra stessa.
         df_home_matches = df_home_matches[
             (df_home_matches['odd_home'] >= min_odd_home) &
             (df_home_matches['odd_home'] <= max_odd_home)
         ]
 
-    # Calcolo dei ritorni
+    # Calcolo dei ritorni su questo set di partite filtrate per tutti gli esiti
     if not df_home_matches.empty:
         home_back_results = calculate_returns(df_home_matches, 'home', 'Back')
         home_lay_results = calculate_returns(df_home_matches, 'home', 'Lay')
@@ -265,19 +269,21 @@ if selected_away != 'Tutte':
     df_away_matches = filtered_df_teams[filtered_df_teams['away_team'] == selected_away].copy()
 
     if use_away_odd_filter:
-        # Applica il filtro della quota away della squadra stessa
+        # Se il filtro principale è Quota Away, filtriamo le partite della squadra in trasferta
+        # in base alla sua stessa Quota Away.
         df_away_matches = df_away_matches[
             (df_away_matches['odd_away'] >= min_odd_away) &
             (df_away_matches['odd_away'] <= max_odd_away)
         ]
     else:
-        # Logica predefinita: usa il filtro della quota home dell'avversario
+        # Se il filtro principale è Quota Home (default), filtriamo in base
+        # alla Quota Home della squadra avversaria.
         df_away_matches = df_away_matches[
             (df_away_matches['odd_home'] >= min_odd_home) &
             (df_away_matches['odd_home'] <= max_odd_home)
         ]
     
-    # Calcolo dei ritorni
+    # Calcolo dei ritorni su questo set di partite filtrate per tutti gli esiti
     if not df_away_matches.empty:
         home_back_results = calculate_returns(df_away_matches, 'home', 'Back')
         home_lay_results = calculate_returns(df_away_matches, 'home', 'Lay')
