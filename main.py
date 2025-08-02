@@ -344,20 +344,24 @@ if selected_away != 'Tutte':
 if results_data_specific:
     results_df = pd.DataFrame(results_data_specific).set_index('Label')
     
-    # Appiattimento delle colonne del MultiIndex per evitare l'errore
+    # Appiattimento delle colonne del MultiIndex per evitare l'errore di indicizzazione.
     results_df.columns = results_df.columns.map(lambda col: ' - '.join(c for c in col if c != ''))
 
-    # Funzione di stile per le colonne appiattite
-    def style_flat_df(df):
-        return pd.DataFrame(
-            [['color: green;' if 'Pts' in c or 'Roi' in c and x > 0 else 'color: red;' if 'Pts' in c or 'Roi' in c and x < 0 else '' for c, x in r.items()] for _, r in df.iterrows()],
-            index=df.index,
-            columns=df.columns
-        )
+    # Funzione di stile per applicare i colori in base al valore
+    def color_values(val):
+        if isinstance(val, (int, float)):
+            return 'color: green;' if val > 0 else 'color: red;'
+        return None
 
-    # Applica lo stile utilizzando la nuova funzione
-    styled_df = results_df.style.apply(style_flat_df, axis=None)
+    # Creazione dello Styler e applicazione del colore solo alle colonne Pts e Roi
+    styled_df = results_df.style
     
+    # Lista delle colonne da colorare
+    cols_to_style = [col for col in results_df.columns if 'Pts' in col or 'Roi' in col]
+
+    for col in cols_to_style:
+        styled_df = styled_df.map(color_values, subset=[col])
+
     st.dataframe(styled_df, use_container_width=True)
 else:
     st.info("Nessuna squadra da analizzare con i filtri selezionati.")
