@@ -198,95 +198,124 @@ st.markdown("---")
 st.header("2. Analisi Ritorno per Squadra")
 st.write("Rendimento di ogni singola squadra nel dataset filtrato.")
 
-# Applicazione dei filtri di campionato e quote per l'analisi per squadra
+# Applica il filtro campionato come base
 filtered_df_teams = df_original.copy()
 if selected_campionato != 'Tutti' and 'league' in filtered_df_teams.columns:
     filtered_df_teams = filtered_df_teams[filtered_df_teams['league'] == selected_campionato]
-if 'odd_home' in filtered_df_teams.columns:
-    filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_home'] >= min_odd_home) & (filtered_df_teams['odd_home'] <= max_odd_home)]
-if 'odd_draw' in filtered_df_teams.columns:
-    filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_draw'] >= min_odd_draw) & (filtered_df_teams['odd_draw'] <= max_odd_draw)]
-if 'odd_away' in filtered_df_teams.columns:
-    filtered_df_teams = filtered_df_teams[(filtered_df_teams['odd_away'] >= min_odd_away) & (filtered_df_teams['odd_away'] <= max_odd_away)]
 
-# Applica i filtri delle squadre con la logica corretta (OR)
-if selected_home != 'Tutte' and selected_away != 'Tutte':
-    filtered_df_teams = filtered_df_teams[
-        (filtered_df_teams['home_team'] == selected_home) | 
-        (filtered_df_teams['away_team'] == selected_away)
-    ]
-elif selected_home != 'Tutte':
-    filtered_df_teams = filtered_df_teams[filtered_df_teams['home_team'] == selected_home]
-elif selected_away != 'Tutte':
-    filtered_df_teams = filtered_df_teams[filtered_df_teams['away_team'] == selected_away]
+# Determina quale filtro quote usare come principale
+use_away_odd_filter = (min_odd_away != 1.01) or (max_odd_away != 50.0)
 
+results_data_specific = []
 
-if filtered_df_teams.empty:
-    st.info("Nessuna squadra da analizzare con i filtri selezionati.")
-else:
-    # Ottieni tutte le squadre uniche presenti nel DataFrame filtrato
-    all_teams_filtered = sorted(list(set(filtered_df_teams['home_team'].unique()).union(filtered_df_teams['away_team'].unique())))
+# Analisi per la squadra di casa selezionata
+if selected_home != 'Tutte':
+    df_home_matches = filtered_df_teams[filtered_df_teams['home_team'] == selected_home].copy()
     
-    results_data_specific = []
-    
-    # Cicla su ogni squadra per calcolare i ritorni
-    for team in all_teams_filtered:
-        # Filtra le partite in cui la squadra gioca in casa
-        df_home_matches = filtered_df_teams[filtered_df_teams['home_team'] == team]
-        # Filtra le partite in cui la squadra gioca in trasferta
-        df_away_matches = filtered_df_teams[filtered_df_teams['away_team'] == team]
-        
-        # Calcola il numero totale di partite per la squadra
-        total_matches = len(df_home_matches) + len(df_away_matches)
-        
-        if total_matches > 0:
-            # Calcola i ritorni per gli scenari Home, Draw, Away
-            home_back_results = calculate_returns(df_home_matches, 'home', 'Back')
-            home_lay_results = calculate_returns(df_home_matches, 'home', 'Lay')
-            
-            draw_back_results = calculate_returns(filtered_df_teams[(filtered_df_teams['home_team'] == team) | (filtered_df_teams['away_team'] == team)], 'draw', 'Back')
-            draw_lay_results = calculate_returns(filtered_df_teams[(filtered_df_teams['home_team'] == team) | (filtered_df_teams['away_team'] == team)], 'draw', 'Lay')
-            
-            away_back_results = calculate_returns(df_away_matches, 'away', 'Back')
-            away_lay_results = calculate_returns(df_away_matches, 'away', 'Lay')
-            
-            # Costruisci la riga per la tabella con tuple come chiavi per un MultiIndex uniforme
-            row_data = {
-                'Label': team,
-                ('Matches', '', 'Total'): total_matches,
-                ('Home', 'Back', 'Win%'): home_back_results['Win%'],
-                ('Home', 'Back', 'Pts'): home_back_results['Pts'],
-                ('Home', 'Back', 'Roi'): home_back_results['Roi'],
-                ('Home', 'Lay', 'Win%'): home_lay_results['Win%'],
-                ('Home', 'Lay', 'Pts'): home_lay_results['Pts'],
-                ('Home', 'Lay', 'Roi'): home_lay_results['Roi'],
-                
-                ('Draw', 'Back', 'Win%'): draw_back_results['Win%'],
-                ('Draw', 'Back', 'Pts'): draw_back_results['Pts'],
-                ('Draw', 'Back', 'Roi'): draw_back_results['Roi'],
-                ('Draw', 'Lay', 'Win%'): draw_lay_results['Win%'],
-                ('Draw', 'Lay', 'Pts'): draw_lay_results['Pts'],
-                ('Draw', 'Lay', 'Roi'): draw_lay_results['Roi'],
-                
-                ('Away', 'Back', 'Win%'): away_back_results['Win%'],
-                ('Away', 'Back', 'Pts'): away_back_results['Pts'],
-                ('Away', 'Back', 'Roi'): away_back_results['Roi'],
-                ('Away', 'Lay', 'Win%'): away_lay_results['Win%'],
-                ('Away', 'Lay', 'Pts'): away_lay_results['Pts'],
-                ('Away', 'Lay', 'Roi'): away_lay_results['Roi']
-            }
-            results_data_specific.append(row_data)
-
-    if results_data_specific:
-        # Creazione del DataFrame con MultiIndex automatico dalle chiavi a tuple
-        results_df = pd.DataFrame(results_data_specific).set_index('Label')
-        
-        # Creazione di una lista di tuple per le colonne da formattare
-        # Questo approccio evita l'errore di indicizzazione
-        cols_to_style = [col for col in results_df.columns if col[2] in ['Pts', 'Roi']]
-        
-        # Applica la formattazione e visualizza la tabella
-        styled_df = results_df.style.applymap(color_positive_negative, subset=cols_to_style)
-        st.dataframe(styled_df, use_container_width=True)
+    if use_away_odd_filter:
+        # Applica il filtro della quota away dell'avversario
+        df_home_matches = df_home_matches[
+            (df_home_matches['odd_away'] >= min_odd_away) &
+            (df_home_matches['odd_away'] <= max_odd_away)
+        ]
     else:
-        st.info("Nessuna squadra da analizzare con i filtri selezionati.")
+        # Logica predefinita: usa il filtro della quota home della squadra stessa
+        df_home_matches = df_home_matches[
+            (df_home_matches['odd_home'] >= min_odd_home) &
+            (df_home_matches['odd_home'] <= max_odd_home)
+        ]
+
+    # Calcolo dei ritorni
+    if not df_home_matches.empty:
+        home_back_results = calculate_returns(df_home_matches, 'home', 'Back')
+        home_lay_results = calculate_returns(df_home_matches, 'home', 'Lay')
+        draw_back_results = calculate_returns(df_home_matches, 'draw', 'Back')
+        draw_lay_results = calculate_returns(df_home_matches, 'draw', 'Lay')
+        away_back_results = calculate_returns(df_home_matches, 'away', 'Back')
+        away_lay_results = calculate_returns(df_home_matches, 'away', 'Lay')
+
+        row_data = {
+            'Label': f"{selected_home} (Casa)",
+            ('Matches', '', 'Total'): len(df_home_matches),
+            ('Home', 'Back', 'Win%'): home_back_results['Win%'],
+            ('Home', 'Back', 'Pts'): home_back_results['Pts'],
+            ('Home', 'Back', 'Roi'): home_back_results['Roi'],
+            ('Home', 'Lay', 'Win%'): home_lay_results['Win%'],
+            ('Home', 'Lay', 'Pts'): home_lay_results['Pts'],
+            ('Home', 'Lay', 'Roi'): home_lay_results['Roi'],
+            
+            ('Draw', 'Back', 'Win%'): draw_back_results['Win%'],
+            ('Draw', 'Back', 'Pts'): draw_back_results['Pts'],
+            ('Draw', 'Back', 'Roi'): draw_back_results['Roi'],
+            ('Draw', 'Lay', 'Win%'): draw_lay_results['Win%'],
+            ('Draw', 'Lay', 'Pts'): draw_lay_results['Pts'],
+            ('Draw', 'Lay', 'Roi'): draw_lay_results['Roi'],
+            
+            ('Away', 'Back', 'Win%'): away_back_results['Win%'],
+            ('Away', 'Back', 'Pts'): away_back_results['Pts'],
+            ('Away', 'Back', 'Roi'): away_back_results['Roi'],
+            ('Away', 'Lay', 'Win%'): away_lay_results['Win%'],
+            ('Away', 'Lay', 'Pts'): away_lay_results['Pts'],
+            ('Away', 'Lay', 'Roi'): away_lay_results['Roi']
+        }
+        results_data_specific.append(row_data)
+
+# Analisi per la squadra in trasferta selezionata
+if selected_away != 'Tutte':
+    df_away_matches = filtered_df_teams[filtered_df_teams['away_team'] == selected_away].copy()
+
+    if use_away_odd_filter:
+        # Applica il filtro della quota away della squadra stessa
+        df_away_matches = df_away_matches[
+            (df_away_matches['odd_away'] >= min_odd_away) &
+            (df_away_matches['odd_away'] <= max_odd_away)
+        ]
+    else:
+        # Logica predefinita: usa il filtro della quota home dell'avversario
+        df_away_matches = df_away_matches[
+            (df_away_matches['odd_home'] >= min_odd_home) &
+            (df_away_matches['odd_home'] <= max_odd_home)
+        ]
+    
+    # Calcolo dei ritorni
+    if not df_away_matches.empty:
+        home_back_results = calculate_returns(df_away_matches, 'home', 'Back')
+        home_lay_results = calculate_returns(df_away_matches, 'home', 'Lay')
+        draw_back_results = calculate_returns(df_away_matches, 'draw', 'Back')
+        draw_lay_results = calculate_returns(df_away_matches, 'draw', 'Lay')
+        away_back_results = calculate_returns(df_away_matches, 'away', 'Back')
+        away_lay_results = calculate_returns(df_away_matches, 'away', 'Lay')
+
+        row_data = {
+            'Label': f"{selected_away} (Trasferta)",
+            ('Matches', '', 'Total'): len(df_away_matches),
+            ('Home', 'Back', 'Win%'): home_back_results['Win%'],
+            ('Home', 'Back', 'Pts'): home_back_results['Pts'],
+            ('Home', 'Back', 'Roi'): home_back_results['Roi'],
+            ('Home', 'Lay', 'Win%'): home_lay_results['Win%'],
+            ('Home', 'Lay', 'Pts'): home_lay_results['Pts'],
+            ('Home', 'Lay', 'Roi'): home_lay_results['Roi'],
+            
+            ('Draw', 'Back', 'Win%'): draw_back_results['Win%'],
+            ('Draw', 'Back', 'Pts'): draw_back_results['Pts'],
+            ('Draw', 'Back', 'Roi'): draw_back_results['Roi'],
+            ('Draw', 'Lay', 'Win%'): draw_lay_results['Win%'],
+            ('Draw', 'Lay', 'Pts'): draw_lay_results['Pts'],
+            ('Draw', 'Lay', 'Roi'): draw_lay_results['Roi'],
+            
+            ('Away', 'Back', 'Win%'): away_back_results['Win%'],
+            ('Away', 'Back', 'Pts'): away_back_results['Pts'],
+            ('Away', 'Back', 'Roi'): away_back_results['Roi'],
+            ('Away', 'Lay', 'Win%'): away_lay_results['Win%'],
+            ('Away', 'Lay', 'Pts'): away_lay_results['Pts'],
+            ('Away', 'Lay', 'Roi'): away_lay_results['Roi']
+        }
+        results_data_specific.append(row_data)
+
+if results_data_specific:
+    results_df = pd.DataFrame(results_data_specific).set_index('Label')
+    cols_to_style = [col for col in results_df.columns if col[2] in ['Pts', 'Roi']]
+    styled_df = results_df.style.applymap(color_positive_negative, subset=cols_to_style)
+    st.dataframe(styled_df, use_container_width=True)
+else:
+    st.info("Nessuna squadra da analizzare con i filtri selezionati.")
