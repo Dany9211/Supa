@@ -243,10 +243,11 @@ else:
             away_back_results = calculate_returns(df_away_matches, 'away', 'Back')
             away_lay_results = calculate_returns(df_away_matches, 'away', 'Lay')
             
-            # Costruisci la riga per la tabella
+            # Costruisci la riga per la tabella con tuple come chiavi per un MultiIndex uniforme
             row_data = {
                 'Label': team,
-                'Matches': total_matches,
+                # La chiave è ora una tupla a 3 livelli per coerenza con le altre colonne
+                ('Matches', '', 'Total'): total_matches,
                 ('Home', 'Back', 'Win%'): home_back_results['Win%'],
                 ('Home', 'Back', 'Pts'): home_back_results['Pts'],
                 ('Home', 'Back', 'Roi'): home_back_results['Roi'],
@@ -271,22 +272,11 @@ else:
             results_data_specific.append(row_data)
 
     if results_data_specific:
-        # Creazione del DataFrame con MultiIndex per le colonne
-        columns = pd.MultiIndex.from_tuples([
-            ('Matches', ''),
-            ('Home', 'Back', 'Win%'), ('Home', 'Back', 'Pts'), ('Home', 'Back', 'Roi'),
-            ('Home', 'Lay', 'Win%'), ('Home', 'Lay', 'Pts'), ('Home', 'Lay', 'Roi'),
-            ('Draw', 'Back', 'Win%'), ('Draw', 'Back', 'Pts'), ('Draw', 'Back', 'Roi'),
-            ('Draw', 'Lay', 'Win%'), ('Draw', 'Lay', 'Pts'), ('Draw', 'Lay', 'Roi'),
-            ('Away', 'Back', 'Win%'), ('Away', 'Back', 'Pts'), ('Away', 'Back', 'Roi'),
-            ('Away', 'Lay', 'Win%'), ('Away', 'Lay', 'Pts'), ('Away', 'Lay', 'Roi')
-        ])
-
+        # Creazione del DataFrame con MultiIndex automatico dalle chiavi a tuple
         results_df = pd.DataFrame(results_data_specific).set_index('Label')
-        results_df.columns = columns
         
         # Applica la formattazione e visualizza la tabella
-        styled_df = results_df.style.applymap(color_positive_negative, subset=pd.IndexSlice[:, pd.IndexSlice[:, ['Pts', 'Roi']]])
+        styled_df = results_df.style.applymap(color_positive_negative, subset=pd.IndexSlice[:, :, ['Pts', 'Roi']])
         st.dataframe(styled_df, use_container_width=True)
     else:
         st.info("Nessuna squadra da analizzare con i filtri selezionati.")
