@@ -9,9 +9,16 @@ from sklearn.preprocessing import StandardScaler
 # Funzione per calcolare le probabilità e le value bet
 def calculate_probabilities_and_value_bets(df):
     
+    # Pulizia e preparazione dei dati
+    df.columns = df.columns.str.strip().str.replace(' ', '_')
+    df = df.rename(columns={'HomeTeam': 'HomeTeam', 'AwayTeam': 'AwayTeam', 
+                            'FTHG': 'FTHG', 'FTAG': 'FTAG',
+                            'PSH': 'PSH', 'PSD': 'PSD', 'PSA': 'PSA',
+                            'league': 'league'})
+
     # Calcolo della classifica
-    df['HomePos'] = df.groupby('league')['HomeTeam'].rank(method='dense')
-    df['AwayPos'] = df.groupby('league')['AwayTeam'].rank(method='dense')
+    df['HomePos'] = df.groupby('league')['HomeTeam'].rank(method='dense', ascending=False)
+    df['AwayPos'] = df.groupby('league')['AwayTeam'].rank(method='dense', ascending=False)
     
     # Codifica dei risultati in numeri
     def result_to_numeric(row):
@@ -43,8 +50,8 @@ def calculate_probabilities_and_value_bets(df):
         
         # Elimina le righe con valori mancanti nelle feature
         league_df.dropna(subset=features, inplace=True)
-        if league_df.empty:
-            st.warning(f'Nessun dato valido per il campionato {league}.')
+        if league_df.empty or len(league_df) < 10:  # Aggiunto un controllo minimo
+            st.warning(f'Dati insufficienti o non validi per il campionato {league}.')
             continue
 
         X = league_df[features]
@@ -154,11 +161,18 @@ st.markdown("Carica un file CSV con le seguenti colonne: `Date`, `HomeTeam`, `Aw
 uploaded_file = st.file_uploader("Scegli un file CSV", type="csv")
 
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.write("Anteprima dei dati caricati:")
-    st.dataframe(df.head())
-    
-    if st.button("Esegui l'analisi"):
-        with st.spinner('Elaborazione in corso...'):
-            calculate_probabilities_and_value_bets(df)
-        st.success('Analisi completata!')
+    try:
+        df = pd.read_csv(uploaded_file)
+        st.write("Anteprima dei dati caricati:")
+        st.dataframe(df.head())
+        
+        required_cols = ['HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'PSH', 'PSD', 'PSA', 'league']
+        if all(col in df.columns for col in required_cols):
+            if st.button("Esegui l'analisi"):
+                with st.spinner('Elaborazione in corso...'):
+                    calculate_probabilities_and_value_bets(df)
+                st.success('Analisi completata!')
+        else:
+            st.error(f"Il file CSV deve contenere le seguenti colonne: {', '.join(required_cols)}")
+    except Exception as e:
+        st.error(f"Errore durante la lettura del file: {e}")
