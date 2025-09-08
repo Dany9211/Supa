@@ -16,7 +16,7 @@ def calculate_probabilities_and_value_bets(df):
                             'PSH': 'PSH', 'PSD': 'PSD', 'PSA': 'PSA',
                             'league': 'league'})
 
-    # Calcolo della classifica
+    # Calcolo della classifica (esemplificativo)
     df['HomePos'] = df.groupby('league')['HomeTeam'].rank(method='dense', ascending=False)
     df['AwayPos'] = df.groupby('league')['AwayTeam'].rank(method='dense', ascending=False)
     
@@ -45,7 +45,6 @@ def calculate_probabilities_and_value_bets(df):
     for league in df['league'].unique():
         st.subheader(f'Campionato: {league}')
         
-        # Filtra i dati per il campionato corrente
         league_df = df[df['league'] == league].copy()
         
         # Elimina le righe con valori mancanti nelle feature
@@ -57,69 +56,55 @@ def calculate_probabilities_and_value_bets(df):
         X = league_df[features]
         y = league_df['Result']
 
-        # Divisione in training e testing set (80% train, 20% test)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Normalizzazione delle features
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Addestramento del modello
         model = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
         model.fit(X_train_scaled, y_train)
 
-        # Previsioni e probabilità
         y_pred = model.predict(X_test_scaled)
         y_pred_proba = model.predict_proba(X_test_scaled)
         
-        # Calcolo dell'accuratezza
         accuracy = accuracy_score(y_test, y_pred)
         st.write(f"Accuratezza del modello per il test set: {accuracy:.2%}")
         
-        # Aggiungi le probabilità previste al test set
         X_test_with_proba = X_test.copy()
         X_test_with_proba['PredProbHome'] = y_pred_proba[:, 0]
         X_test_with_proba['PredProbDraw'] = y_pred_proba[:, 1]
         X_test_with_proba['PredProbAway'] = y_pred_proba[:, 2]
 
-        # Aggiungi le colonne originali
         test_df_original = league_df.loc[X_test_with_proba.index]
         X_test_with_proba = pd.concat([test_df_original[['HomeTeam', 'AwayTeam', 'PSH', 'PSD', 'PSA', 'Result']], X_test_with_proba], axis=1)
 
-        # Calcolo delle Value Bets
         value_bets_home = X_test_with_proba[(X_test_with_proba['PredProbHome'] * X_test_with_proba['PSH'] > 1)]
         value_bets_draw = X_test_with_proba[(X_test_with_proba['PredProbDraw'] * X_test_with_proba['PSD'] > 1)]
         value_bets_away = X_test_with_proba[(X_test_with_proba['PredProbAway'] * X_test_with_proba['PSA'] > 1)]
 
-        # Calcolo del ROI
-        # ROI Home
         roi_home = 0
         if not value_bets_home.empty:
             capital_home = len(value_bets_home)
             winnings_home = value_bets_home[value_bets_home['Result'] == 0]['PSH'].sum()
             roi_home = (winnings_home - capital_home) / capital_home * 100 if capital_home > 0 else 0
         
-        # ROI Draw
         roi_draw = 0
         if not value_bets_draw.empty:
             capital_draw = len(value_bets_draw)
             winnings_draw = value_bets_draw[value_bets_draw['Result'] == 1]['PSD'].sum()
             roi_draw = (winnings_draw - capital_draw) / capital_draw * 100 if capital_draw > 0 else 0
         
-        # ROI Away
         roi_away = 0
         if not value_bets_away.empty:
             capital_away = len(value_bets_away)
             winnings_away = value_bets_away[value_bets_away['Result'] == 2]['PSA'].sum()
             roi_away = (winnings_away - capital_away) / capital_away * 100 if capital_away > 0 else 0
 
-        # Mostra i risultati
         st.write(f"ROI Home: **{roi_home:.2f}%** ({len(value_bets_home)} scommesse)")
         st.write(f"ROI Draw: **{roi_draw:.2f}%** ({len(value_bets_draw)} scommesse)")
         st.write(f"ROI Away: **{roi_away:.2f}%** ({len(value_bets_away)} scommesse)")
 
-        # Mostra le scommesse identificate
         if not value_bets_home.empty:
             st.markdown("### Value Bets per la vittoria in casa")
             st.dataframe(value_bets_home[['HomeTeam', 'AwayTeam', 'PSH', 'PredProbHome']].rename(columns={'PSH': 'Quota', 'PredProbHome': 'Probabilità Prevista'}))
@@ -132,7 +117,6 @@ def calculate_probabilities_and_value_bets(df):
             st.markdown("### Value Bets per la vittoria in trasferta")
             st.dataframe(value_bets_away[['HomeTeam', 'AwayTeam', 'PSA', 'PredProbAway']].rename(columns={'PSA': 'Quota', 'PredProbAway': 'Probabilità Prevista'}))
 
-        # Aggiungi i risultati al dataframe finale
         results_df = pd.concat([results_df, pd.DataFrame([{
             'Campionato': league,
             'ROI Home': roi_home,
@@ -161,8 +145,14 @@ st.markdown("Carica un file CSV con le seguenti colonne: `Date`, `HomeTeam`, `Aw
 uploaded_file = st.file_uploader("Scegli un file CSV", type="csv")
 
 if uploaded_file is not None:
+    col1, col2 = st.columns(2)
+    with col1:
+        delimiter = st.text_input("Delimitatore (es. ',' o ';')", value=',')
+    with col2:
+        skip_bad_lines = st.checkbox("Ignora righe con errori", value=True)
+
     try:
-        df = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file, sep=delimiter, on_bad_lines='skip' if skip_bad_lines else 'error', engine='python')
         st.write("Anteprima dei dati caricati:")
         st.dataframe(df.head())
         
@@ -173,6 +163,7 @@ if uploaded_file is not None:
                     calculate_probabilities_and_value_bets(df)
                 st.success('Analisi completata!')
         else:
-            st.error(f"Il file CSV deve contenere le seguenti colonne: {', '.join(required_cols)}")
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            st.error(f"Il file CSV deve contenere le seguenti colonne. Mancano: {', '.join(missing_cols)}")
     except Exception as e:
         st.error(f"Errore durante la lettura del file: {e}")
