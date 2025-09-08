@@ -94,6 +94,7 @@ def calculate_probabilities_and_value_bets(df):
 
         # Calcolo Value Bets (LAY)
         st.markdown("### Analisi Scommesse LAY (Contro)")
+        # La quota Lay è calcolata come: Quota Lay = Quota Back / (Quota Back - 1)
         value_bets_home_lay = X_test_with_proba[((X_test_with_proba['PredProbDraw'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSH']/(X_test_with_proba['PSH']-1)) > 1)]
         value_bets_draw_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSD']/(X_test_with_proba['PSD']-1)) > 1)]
         value_bets_away_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbDraw']) * (X_test_with_proba['PSA']/(X_test_with_proba['PSA']-1)) > 1)]
@@ -105,16 +106,6 @@ def calculate_probabilities_and_value_bets(df):
         st.write(f"ROI Lay Home: **{roi_home_lay:.2f}%** ({len(value_bets_home_lay)} scommesse)")
         st.write(f"ROI Lay Draw: **{roi_draw_lay:.2f}%** ({len(value_bets_draw_lay)} scommesse)")
         st.write(f"ROI Lay Away: **{roi_away_lay:.2f}%** ({len(value_bets_away_lay)} scommesse)")
-
-        if not value_bets_home_back.empty:
-            st.markdown("#### Scommesse BACK Home Win")
-            st.dataframe(value_bets_home_back[['HomeTeam', 'AwayTeam', 'PSH', 'PredProbHome']].rename(columns={'PSH': 'Quota', 'PredProbHome': 'Probabilità Prevista'}))
-        if not value_bets_draw_back.empty:
-            st.markdown("#### Scommesse BACK Draw")
-            st.dataframe(value_bets_draw_back[['HomeTeam', 'AwayTeam', 'PSD', 'PredProbDraw']].rename(columns={'PSD': 'Quota', 'PredProbDraw': 'Probabilità Prevista'}))
-        if not value_bets_away_back.empty:
-            st.markdown("#### Scommesse BACK Away Win")
-            st.dataframe(value_bets_away_back[['HomeTeam', 'AwayTeam', 'PSA', 'PredProbAway']].rename(columns={'PSA': 'Quota', 'PredProbAway': 'Probabilità Prevista'}))
         
         results_df = pd.concat([results_df, pd.DataFrame([{
             'Campionato': league, 'ROI Home Back': roi_home_back, 'ROI Draw Back': roi_draw_back, 'ROI Away Back': roi_away_back,
@@ -127,8 +118,6 @@ def calculate_probabilities_and_value_bets(df):
 
 # Funzione per prevedere una singola partita (parte 2)
 def predict_single_match(model, scaler, home_pos, away_pos, odd_home, odd_draw, odd_away):
-    
-    # Prepara i dati per la previsione
     try:
         data = [[1/odd_home, 1/odd_draw, 1/odd_away, home_pos, away_pos]]
         new_match_df = pd.DataFrame(data, columns=['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos'])
@@ -171,7 +160,7 @@ if uploaded_file is not None:
 st.markdown("---")
 
 st.header("2. Previsione Nuova Partita")
-st.markdown("Inserisci manualmente i dati per prevedere le probabilità di un match futuro. **Nota**: L'analisi di una singola partita funziona solo dopo aver eseguito l'analisi storica, perché il modello viene addestrato con i dati che hai caricato.")
+st.markdown("Inserisci manualmente i dati per prevedere le probabilità di un match futuro. **Nota**: Per utilizzare questa sezione, devi prima aver caricato un file CSV nella sezione 'Analisi su Dati Storici' per addestrare il modello.")
 
 if 'df_historical' not in st.session_state:
     st.session_state.df_historical = None
@@ -218,13 +207,13 @@ if st.session_state.df_historical is not None:
     
     col1, col2 = st.columns(2)
     with col1:
-        home_pos_input = st.number_input("Posizione in classifica squadra di casa:", min_value=1, format="%d")
-        odd_home_input = st.number_input("Quota Home:", min_value=1.0, format="%f")
-        odd_draw_input = st.number_input("Quota Draw:", min_value=1.0, format="%f")
+        home_pos_input = st.number_input("Posizione in classifica squadra di casa:", min_value=1, format="%d", value=1)
+        odd_home_input = st.number_input("Quota Home:", min_value=1.0, format="%f", value=1.0)
+        odd_draw_input = st.number_input("Quota Draw:", min_value=1.0, format="%f", value=1.0)
         
     with col2:
-        away_pos_input = st.number_input("Posizione in classifica squadra in trasferta:", min_value=1, format="%d")
-        odd_away_input = st.number_input("Quota Away:", min_value=1.0, format="%f")
+        away_pos_input = st.number_input("Posizione in classifica squadra in trasferta:", min_value=1, format="%d", value=1)
+        odd_away_input = st.number_input("Quota Away:", min_value=1.0, format="%f", value=1.0)
         st.markdown("<br>", unsafe_allow_html=True) # Spaziatore
         if st.button("Prevedi Risultato"):
             if home_pos_input and odd_home_input and odd_draw_input and away_pos_input and odd_away_input:
