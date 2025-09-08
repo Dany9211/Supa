@@ -9,25 +9,32 @@ from sklearn.preprocessing import StandardScaler
 # Funzione per calcolare le probabilità e le value bet
 def calculate_probabilities_and_value_bets(df):
     
-    # Pulizia e preparazione dei dati
-    df.columns = df.columns.str.strip().str.replace(' ', '_')
-    df = df.rename(columns={'HomeTeam': 'HomeTeam', 'AwayTeam': 'AwayTeam', 
-                            'FTHG': 'FTHG', 'FTAG': 'FTAG',
-                            'PSH': 'PSH', 'PSD': 'PSD', 'PSA': 'PSA',
-                            'league': 'league'})
+    # Rinominare le colonne per coerenza con il modello
+    df = df.rename(columns={
+        'League': 'league',
+        'Home_Team': 'HomeTeam',
+        'Away_Team': 'AwayTeam',
+        'Gol_Home_FT': 'FTHG',
+        'Gol_Away_FT': 'FTAG',
+        'Odd_Home': 'PSH',
+        'Odd_Draw': 'PSD',
+        'Odd__Away': 'PSA',
+        'Home_Pos_Tot': 'HomePos',
+        'Away_Pos_Tot': 'AwayPos'
+    })
 
-    # Calcolo della classifica (esemplificativo)
-    df['HomePos'] = df.groupby('league')['HomeTeam'].rank(method='dense', ascending=False)
-    df['AwayPos'] = df.groupby('league')['AwayTeam'].rank(method='dense', ascending=False)
+    # Conversione delle colonne delle quote in numeri (sostituendo la virgola con il punto)
+    for col in ['PSH', 'PSD', 'PSA']:
+        df[col] = df[col].astype(str).str.replace(',', '.', regex=False).astype(float)
     
-    # Codifica dei risultati in numeri
+    # Codifica dei risultati in numeri (0: vittoria casa, 1: pareggio, 2: vittoria trasferta)
     def result_to_numeric(row):
         if row['FTHG'] > row['FTAG']:
-            return 0  # Home Win
+            return 0
         elif row['FTHG'] == row['FTAG']:
-            return 1  # Draw
+            return 1
         else:
-            return 2  # Away Win
+            return 2
     df['Result'] = df.apply(result_to_numeric, axis=1)
 
     # Feature engineering
@@ -47,9 +54,9 @@ def calculate_probabilities_and_value_bets(df):
         
         league_df = df[df['league'] == league].copy()
         
-        # Elimina le righe con valori mancanti nelle feature
+        # Elimina le righe con valori mancanti
         league_df.dropna(subset=features, inplace=True)
-        if league_df.empty or len(league_df) < 10:  # Aggiunto un controllo minimo
+        if league_df.empty or len(league_df) < 10:
             st.warning(f'Dati insufficienti o non validi per il campionato {league}.')
             continue
 
@@ -65,11 +72,7 @@ def calculate_probabilities_and_value_bets(df):
         model = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
         model.fit(X_train_scaled, y_train)
 
-        y_pred = model.predict(X_test_scaled)
         y_pred_proba = model.predict_proba(X_test_scaled)
-        
-        accuracy = accuracy_score(y_test, y_pred)
-        st.write(f"Accuratezza del modello per il test set: {accuracy:.2%}")
         
         X_test_with_proba = X_test.copy()
         X_test_with_proba['PredProbHome'] = y_pred_proba[:, 0]
@@ -140,23 +143,18 @@ e le confronta con le quote dei bookmaker. Una value bet si verifica quando la p
 
 st.markdown("---")
 st.markdown("## Carica i Dati")
-st.markdown("Carica un file CSV con le seguenti colonne: `Date`, `HomeTeam`, `AwayTeam`, `FTHG`, `FTAG`, `PSH`, `PSD`, `PSA`, `league`.")
+st.markdown("Carica un file CSV con le seguenti colonne: `League`, `Home_Team`, `Away_Team`, `Gol_Home_FT`, `Gol_Away_FT`, `Odd_Home`, `Odd_Draw`, `Odd__Away`, `Home_Pos_Tot`, `Away_Pos_Tot`.")
 
 uploaded_file = st.file_uploader("Scegli un file CSV", type="csv")
 
 if uploaded_file is not None:
-    col1, col2 = st.columns(2)
-    with col1:
-        delimiter = st.text_input("Delimitatore (es. ',' o ';')", value=',')
-    with col2:
-        skip_bad_lines = st.checkbox("Ignora righe con errori", value=True)
-
     try:
-        df = pd.read_csv(uploaded_file, sep=delimiter, on_bad_lines='skip' if skip_bad_lines else 'error', engine='python')
+        # Carica il file CSV, gestendo gli errori di formato
+        df = pd.read_csv(uploaded_file, sep=',', on_bad_lines='skip', engine='python')
         st.write("Anteprima dei dati caricati:")
         st.dataframe(df.head())
         
-        required_cols = ['HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'PSH', 'PSD', 'PSA', 'league']
+        required_cols = ['League', 'Home_Team', 'Away_Team', 'Gol_Home_FT', 'Gol_Away_FT', 'Odd_Home', 'Odd_Draw', 'Odd__Away', 'Home_Pos_Tot', 'Away_Pos_Tot']
         if all(col in df.columns for col in required_cols):
             if st.button("Esegui l'analisi"):
                 with st.spinner('Elaborazione in corso...'):
@@ -166,4 +164,4 @@ if uploaded_file is not None:
             missing_cols = [col for col in required_cols if col not in df.columns]
             st.error(f"Il file CSV deve contenere le seguenti colonne. Mancano: {', '.join(missing_cols)}")
     except Exception as e:
-        st.error(f"Errore durante la lettura del file: {e}")
+        st.error(f"Errore durante la lettura del file: {e}. Controlla il formato del file o il delimitatore.")
