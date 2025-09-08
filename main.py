@@ -19,6 +19,8 @@ def calculate_probabilities_and_value_bets(df, ranking_option):
         'Odd_Home': 'PSH',
         'Odd_Draw': 'PSD',
         'Odd__Away': 'PSA',
+        'Odd_over_2.5': 'Odd_Over_2_5',
+        'Giornata': 'Giornata',
         'Home_Pos_Tot': 'HomePos_Tot',
         'Away_Pos_Tot': 'AwayPos_Tot',
         'Home_Pos_H': 'HomePos_H',
@@ -26,7 +28,7 @@ def calculate_probabilities_and_value_bets(df, ranking_option):
     })
 
     # Conversione delle colonne delle quote in numeri
-    for col in ['PSH', 'PSD', 'PSA']:
+    for col in ['PSH', 'PSD', 'PSA', 'Odd_Over_2_5']:
         df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
         df[col] = pd.to_numeric(df[col], errors='coerce')
         df[col] = df[col].replace(0, np.nan)
@@ -54,7 +56,7 @@ def calculate_probabilities_and_value_bets(df, ranking_option):
         df['HomePos'] = df['HomePos_H']
         df['AwayPos'] = df['AwayPos_A']
     
-    features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos']
+    features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos', 'Odd_Over_2_5', 'Giornata']
     results_df = pd.DataFrame()
 
     for league in df['league'].unique():
@@ -126,10 +128,10 @@ def calculate_probabilities_and_value_bets(df, ranking_option):
     st.dataframe(results_df)
 
 # Funzione per prevedere una singola partita (parte 2)
-def predict_single_match(model, scaler, home_pos, away_pos, odd_home, odd_draw, odd_away):
+def predict_single_match(model, scaler, home_pos, away_pos, odd_home, odd_draw, odd_away, odd_over_2_5, giornata):
     try:
-        data = [[1/odd_home, 1/odd_draw, 1/odd_away, home_pos, away_pos]]
-        new_match_df = pd.DataFrame(data, columns=['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos'])
+        data = [[1/odd_home, 1/odd_draw, 1/odd_away, home_pos, away_pos, odd_over_2_5, giornata]]
+        new_match_df = pd.DataFrame(data, columns=['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos', 'Odd_Over_2_5', 'Giornata'])
         
         new_match_scaled = scaler.transform(new_match_df)
         pred_proba = model.predict_proba(new_match_scaled)[0]
@@ -160,7 +162,7 @@ if uploaded_file is not None:
         st.write("Anteprima dei dati caricati:")
         st.dataframe(df.head())
         
-        required_cols = ['League', 'Home_Team', 'Away_Team', 'Gol_Home_FT', 'Gol_Away_FT', 'Odd_Home', 'Odd_Draw', 'Odd__Away', 'Home_Pos_Tot', 'Away_Pos_Tot', 'Home_Pos_H', 'Away_Pos_A']
+        required_cols = ['League', 'Home_Team', 'Away_Team', 'Gol_Home_FT', 'Gol_Away_FT', 'Odd_Home', 'Odd_Draw', 'Odd__Away', 'Odd_over_2.5', 'Giornata', 'Home_Pos_Tot', 'Away_Pos_Tot', 'Home_Pos_H', 'Away_Pos_A']
         if all(col in df.columns for col in required_cols):
             if st.button("Esegui Analisi Storica"):
                 with st.spinner('Elaborazione in corso...'):
@@ -185,10 +187,12 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
         'League': 'league', 'Home_Team': 'HomeTeam', 'Away_Team': 'AwayTeam',
         'Gol_Home_FT': 'FTHG', 'Gol_Away_FT': 'FTAG', 'Odd_Home': 'PSH',
         'Odd_Draw': 'PSD', 'Odd__Away': 'PSA',
+        'Odd_over_2.5': 'Odd_Over_2_5',
+        'Giornata': 'Giornata',
         'Home_Pos_Tot': 'HomePos_Tot', 'Away_Pos_Tot': 'AwayPos_Tot',
         'Home_Pos_H': 'HomePos_H', 'Away_Pos_A': 'AwayPos_A'
     })
-    for col in ['PSH', 'PSD', 'PSA']:
+    for col in ['PSH', 'PSD', 'PSA', 'Odd_Over_2_5']:
         df_pred[col] = df_pred[col].astype(str).str.replace(',', '.', regex=False)
         df_pred[col] = pd.to_numeric(df_pred[col], errors='coerce')
         df_pred[col] = df_pred[col].replace(0, np.nan)
@@ -201,7 +205,7 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
         df_pred['HomePos'] = df_pred['HomePos_H']
         df_pred['AwayPos'] = df_pred['AwayPos_A']
     
-    features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos']
+    features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos', 'Odd_Over_2_5', 'Giornata']
     df_pred['HomeOddsProb'] = 1 / df_pred['PSH']
     df_pred['DrawOddsProb'] = 1 / df_pred['PSD']
     df_pred['AwayOddsProb'] = 1 / df_pred['PSA']
@@ -241,11 +245,14 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
         with col2:
             away_pos_input = st.number_input("Posizione in classifica squadra in trasferta:", min_value=1, format="%d", value=1)
             odd_away_input = st.number_input("Quota Away:", min_value=1.0, format="%f", value=1.0)
+            odd_over_2_5_input = st.number_input("Quota Over 2.5:", min_value=1.0, format="%f", value=1.0)
+            giornata_input = st.number_input("Giornata:", min_value=1, format="%d", value=1)
+            
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Prevedi Risultato"):
-                if home_pos_input and odd_home_input and odd_draw_input and away_pos_input and odd_away_input:
+                if home_pos_input and odd_home_input and odd_draw_input and away_pos_input and odd_away_input and odd_over_2_5_input and giornata_input:
                     with st.spinner('Calcolo della previsione...'):
-                        predictions = predict_single_match(model_pred, scaler_pred, home_pos_input, away_pos_input, odd_home_input, odd_draw_input, odd_away_input)
+                        predictions = predict_single_match(model_pred, scaler_pred, home_pos_input, away_pos_input, odd_home_input, odd_draw_input, odd_away_input, odd_over_2_5_input, giornata_input)
                         if predictions is not None:
                             st.subheader("Risultato della Previsione")
                             st.metric(label="Probabilità di Vittoria Casa", value=f"{predictions[0]*100:.2f}%")
@@ -265,7 +272,7 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             st.write("**Home Win**")
                             if real_odds_home < odd_home_input:
                                 st.success(f"Quota Reale: {real_odds_home:.2f} ➡️ **BACK**")
-                            elif odd_home_input > 1 and real_odds_home > odd_home_input:
+                            elif odd_home_input > 1 and real_odds_home >= odd_home_input:
                                 st.success(f"Quota Reale: {real_odds_home:.2f} ➡️ **LAY**")
                             else:
                                 st.write(f"Quota Reale: {real_odds_home:.2f} ➡️ Nessuna Value Bet")
@@ -273,7 +280,7 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             st.write("**Pareggio**")
                             if real_odds_draw < odd_draw_input:
                                 st.success(f"Quota Reale: {real_odds_draw:.2f} ➡️ **BACK**")
-                            elif odd_draw_input > 1 and real_odds_draw > odd_draw_input:
+                            elif odd_draw_input > 1 and real_odds_draw >= odd_draw_input:
                                 st.success(f"Quota Reale: {real_odds_draw:.2f} ➡️ **LAY**")
                             else:
                                 st.write(f"Quota Reale: {real_odds_draw:.2f} ➡️ Nessuna Value Bet")
@@ -281,7 +288,7 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             st.write("**Away Win**")
                             if real_odds_away < odd_away_input:
                                 st.success(f"Quota Reale: {real_odds_away:.2f} ➡️ **BACK**")
-                            elif odd_away_input > 1 and real_odds_away > odd_away_input:
+                            elif odd_away_input > 1 and real_odds_away >= odd_away_input:
                                 st.success(f"Quota Reale: {real_odds_away:.2f} ➡️ **LAY**")
                             else:
                                 st.write(f"Quota Reale: {real_odds_away:.2f} ➡️ Nessuna Value Bet")
