@@ -92,10 +92,10 @@ def calculate_probabilities_and_value_bets(df, ranking_option):
 
         # Calcolo Value Bets (BACK)
         st.markdown("### Analisi Scommesse BACK (A Favore)")
-        # L'EV è di almeno 10%
-        value_bets_home_back = X_test_with_proba[(X_test_with_proba['PredProbHome'] * X_test_with_proba['PSH'] >= 1.10)]
-        value_bets_draw_back = X_test_with_proba[(X_test_with_proba['PredProbDraw'] * X_test_with_proba['PSD'] >= 1.10)]
-        value_bets_away_back = X_test_with_proba[(X_test_with_proba['PredProbAway'] * X_test_with_proba['PSA'] >= 1.10)]
+        # L'EV > 0
+        value_bets_home_back = X_test_with_proba[(X_test_with_proba['PredProbHome'] * X_test_with_proba['PSH'] > 1)]
+        value_bets_draw_back = X_test_with_proba[(X_test_with_proba['PredProbDraw'] * X_test_with_proba['PSD'] > 1)]
+        value_bets_away_back = X_test_with_proba[(X_test_with_proba['PredProbAway'] * X_test_with_proba['PSA'] > 1)]
 
         roi_home_back = (value_bets_home_back[value_bets_home_back['Result'] == 0]['PSH'].sum() - len(value_bets_home_back)) / len(value_bets_home_back) * 100 if len(value_bets_home_back) > 0 else 0
         roi_draw_back = (value_bets_draw_back[value_bets_draw_back['Result'] == 1]['PSD'].sum() - len(value_bets_draw_back)) / len(value_bets_draw_back) * 100 if len(value_bets_draw_back) > 0 else 0
@@ -107,9 +107,9 @@ def calculate_probabilities_and_value_bets(df, ranking_option):
 
         # Calcolo Value Bets (LAY)
         st.markdown("### Analisi Scommesse LAY (Contro)")
-        value_bets_home_lay = X_test_with_proba[((X_test_with_proba['PredProbDraw'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSH']/(X_test_with_proba['PSH']-1)) >= 1.10)]
-        value_bets_draw_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSD']/(X_test_with_proba['PSD']-1)) >= 1.10)]
-        value_bets_away_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbDraw']) * (X_test_with_proba['PSA']/(X_test_with_proba['PSA']-1)) >= 1.10)]
+        value_bets_home_lay = X_test_with_proba[((X_test_with_proba['PredProbDraw'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSH']/(X_test_with_proba['PSH']-1)) > 1)]
+        value_bets_draw_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSD']/(X_test_with_proba['PSD']-1)) > 1)]
+        value_bets_away_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbDraw']) * (X_test_with_proba['PSA']/(X_test_with_proba['PSA']-1)) > 1)]
         
         roi_home_lay = (len(value_bets_home_lay[value_bets_home_lay['Result'] != 0]) - len(value_bets_home_lay[value_bets_home_lay['Result'] == 0]) * (value_bets_home_lay['PSH']-1).mean()) / len(value_bets_home_lay) * 100 if len(value_bets_home_lay) > 0 else 0
         roi_draw_lay = (len(value_bets_draw_lay[value_bets_draw_lay['Result'] != 1]) - len(value_bets_draw_lay[value_bets_draw_lay['Result'] == 1]) * (value_bets_draw_lay['PSD']-1).mean()) / len(value_bets_draw_lay) * 100 if len(value_bets_draw_lay) > 0 else 0
@@ -270,28 +270,55 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             real_odds_draw = 1/predictions[1]
                             real_odds_away = 1/predictions[2]
 
-                            st.write("**Home Win**")
-                            if real_odds_home < odd_home_input:
-                                st.success(f"Quota Reale: {real_odds_home:.2f} ➡️ **BACK**")
-                            elif odd_home_input > 1 and real_odds_home >= odd_home_input:
-                                st.success(f"Quota Reale: {real_odds_home:.2f} ➡️ **LAY**")
-                            else:
-                                st.write(f"Quota Reale: {real_odds_home:.2f} ➡️ Nessuna Value Bet")
-                                
-                            st.write("**Pareggio**")
-                            if real_odds_draw < odd_draw_input:
-                                st.success(f"Quota Reale: {real_odds_draw:.2f} ➡️ **BACK**")
-                            elif odd_draw_input > 1 and real_odds_draw >= odd_draw_input:
-                                st.success(f"Quota Reale: {real_odds_draw:.2f} ➡️ **LAY**")
-                            else:
-                                st.write(f"Quota Reale: {real_odds_draw:.2f} ➡️ Nessuna Value Bet")
+                            ev_back_home = (predictions[0] * odd_home_input) - 1
+                            ev_lay_home = ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) - 1 if odd_home_input > 1 else -1
 
-                            st.write("**Away Win**")
-                            if real_odds_away < odd_away_input:
-                                st.success(f"Quota Reale: {real_odds_away:.2f} ➡️ **BACK**")
-                            elif odd_away_input > 1 and real_odds_away >= odd_away_input:
-                                st.success(f"Quota Reale: {real_odds_away:.2f} ➡️ **LAY**")
-                            else:
-                                st.write(f"Quota Reale: {real_odds_away:.2f} ➡️ Nessuna Value Bet")
+                            ev_back_draw = (predictions[1] * odd_draw_input) - 1
+                            ev_lay_draw = ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) - 1 if odd_draw_input > 1 else -1
+
+                            ev_back_away = (predictions[2] * odd_away_input) - 1
+                            ev_lay_away = ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) - 1 if odd_away_input > 1 else -1
+                            
+                            # Analisi Home
+                            st.markdown("**Home Win**")
+                            col_home_1, col_home_2 = st.columns(2)
+                            with col_home_1:
+                                st.write(f"Quota Reale: {real_odds_home:.2f}")
+                            with col_home_2:
+                                if ev_back_home >= 0.10:
+                                    st.success(f"✅ Value Bet BACK (EV: {ev_back_home*100:.2f}%)")
+                                elif ev_lay_home >= 0.10:
+                                    st.success(f"✅ Value Bet LAY (EV: {ev_lay_home*100:.2f}%)")
+                                else:
+                                    st.info("ℹ️ Nessuna Value Bet trovata.")
+
+                            # Analisi Draw
+                            st.markdown("**Pareggio**")
+                            col_draw_1, col_draw_2 = st.columns(2)
+                            with col_draw_1:
+                                st.write(f"Quota Reale: {real_odds_draw:.2f}")
+                            with col_draw_2:
+                                if ev_back_draw >= 0.10:
+                                    st.success(f"✅ Value Bet BACK (EV: {ev_back_draw*100:.2f}%)")
+                                elif ev_lay_draw >= 0.10:
+                                    st.success(f"✅ Value Bet LAY (EV: {ev_lay_draw*100:.2f}%)")
+                                else:
+                                    st.info("ℹ️ Nessuna Value Bet trovata.")
+
+                            # Analisi Away
+                            st.markdown("**Away Win**")
+                            col_away_1, col_away_2 = st.columns(2)
+                            with col_away_1:
+                                st.write(f"Quota Reale: {real_odds_away:.2f}")
+                            with col_away_2:
+                                if ev_back_away >= 0.10:
+                                    st.success(f"✅ Value Bet BACK (EV: {ev_back_away*100:.2f}%)")
+                                elif ev_lay_away >= 0.10:
+                                    st.success(f"✅ Value Bet LAY (EV: {ev_lay_away*100:.2f}%)")
+                                else:
+                                    st.info("ℹ️ Nessuna Value Bet trovata.")
+
                         else:
                             st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
+
+    
