@@ -126,7 +126,7 @@ def calculate_probabilities_and_value_bets(df, ranking_option):
     st.dataframe(results_df)
 
 # Funzione per prevedere una singola partita (parte 2)
-def predict_single_match(model, scaler, ranking_option, home_pos, away_pos, odd_home, odd_draw, odd_away):
+def predict_single_match(model, scaler, home_pos, away_pos, odd_home, odd_draw, odd_away):
     try:
         data = [[1/odd_home, 1/odd_draw, 1/odd_away, home_pos, away_pos]]
         new_match_df = pd.DataFrame(data, columns=['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos'])
@@ -179,8 +179,6 @@ st.markdown("---")
 st.header("2. Previsione Nuova Partita")
 
 if 'df_historical' in st.session_state and st.session_state.df_historical is not None:
-    st.markdown(f"#### Inserisci i dati della partita (usando la {st.session_state.ranking_option.lower()})")
-    
     # Preparazione del modello per la previsione
     df_pred = st.session_state.df_historical.rename(columns={
         'League': 'league', 'Home_Team': 'HomeTeam', 'Away_Team': 'AwayTeam',
@@ -207,75 +205,86 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
     df_pred['DrawOddsProb'] = 1 / df_pred['PSD']
     df_pred['AwayOddsProb'] = 1 / df_pred['PSA']
     df_pred.dropna(subset=features, inplace=True)
-
-    X = df_pred[features]
-    y = df_pred['Result']
     
-    scaler_pred = StandardScaler()
-    scaler_pred.fit(X)
-    
-    model_pred = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
-    model_pred.fit(scaler_pred.transform(X), y)
+    # Aggiunge il selettore per il campionato
+    available_leagues = df_pred['league'].unique()
+    selected_league = st.selectbox("Scegli un campionato per la previsione:", available_leagues)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        home_pos_input = st.number_input("Posizione in classifica squadra di casa:", min_value=1, format="%d", value=1)
-        odd_home_input = st.number_input("Quota Home:", min_value=1.0, format="%f", value=1.0)
-        odd_draw_input = st.number_input("Quota Draw:", min_value=1.0, format="%f", value=1.0)
+    # Filtra i dati per il campionato selezionato prima di addestrare il modello
+    df_pred_filtered = df_pred[df_pred['league'] == selected_league].copy()
+    
+    if df_pred_filtered.empty or len(df_pred_filtered) < 10:
+        st.warning(f"Dati insufficienti o non validi per il campionato {selected_league}. Scegli un altro campionato.")
+    else:
+        X = df_pred_filtered[features]
+        y = df_pred_filtered['Result']
         
-    with col2:
-        away_pos_input = st.number_input("Posizione in classifica squadra in trasferta:", min_value=1, format="%d", value=1)
-        odd_away_input = st.number_input("Quota Away:", min_value=1.0, format="%f", value=1.0)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Prevedi Risultato"):
-            if home_pos_input and odd_home_input and odd_draw_input and away_pos_input and odd_away_input:
-                with st.spinner('Calcolo della previsione...'):
-                    predictions = predict_single_match(model_pred, scaler_pred, st.session_state.ranking_option, home_pos_input, away_pos_input, odd_home_input, odd_draw_input, odd_away_input)
-                    if predictions is not None:
-                        st.subheader("Risultato della Previsione")
-                        st.metric(label="Probabilità di Vittoria Casa", value=f"{predictions[0]*100:.2f}%")
-                        st.metric(label="Probabilità di Pareggio", value=f"{predictions[1]*100:.2f}%")
-                        st.metric(label="Probabilità di Vittoria Trasferta", value=f"{predictions[2]*100:.2f}%")
-                        
-                        st.subheader("Quote Reali Calcolate dal Modello")
-                        st.metric(label="Quota Reale Home", value=f"{1/predictions[0]:.2f}")
-                        st.metric(label="Quota Reale Draw", value=f"{1/predictions[1]:.2f}")
-                        st.metric(label="Quota Reale Away", value=f"{1/predictions[2]:.2f}")
-                        
-                        st.subheader("Analisi della Value Bet per Esito")
-                        
-                        # Analisi Home
-                        st.markdown("**Home Win**")
-                        if (predictions[0] * odd_home_input) > 1:
-                            st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[0] * odd_home_input):.2f})")
-                        else:
-                            st.write("❌ Nessuna Value Bet in BACK")
-                        if odd_home_input > 1 and ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) > 1:
-                            st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))):.2f})")
-                        else:
-                            st.write("❌ Nessuna Value Bet in LAY")
+        scaler_pred = StandardScaler()
+        scaler_pred.fit(X)
+        
+        model_pred = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
+        model_pred.fit(scaler_pred.transform(X), y)
 
-                        # Analisi Draw
-                        st.markdown("**Pareggio**")
-                        if (predictions[1] * odd_draw_input) > 1:
-                            st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[1] * odd_draw_input):.2f})")
-                        else:
-                            st.write("❌ Nessuna Value Bet in BACK")
-                        if odd_draw_input > 1 and ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) > 1:
-                            st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))):.2f})")
-                        else:
-                            st.write("❌ Nessuna Value Bet in LAY")
+        st.markdown(f"#### Inserisci i dati per la previsione ({selected_league})")
 
-                        # Analisi Away
-                        st.markdown("**Away Win**")
-                        if (predictions[2] * odd_away_input) > 1:
-                            st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[2] * odd_away_input):.2f})")
-                        else:
-                            st.write("❌ Nessuna Value Bet in BACK")
-                        if odd_away_input > 1 and ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) > 1:
-                            st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))):.2f})")
-                        else:
-                            st.write("❌ Nessuna Value Bet in LAY")
+        col1, col2 = st.columns(2)
+        with col1:
+            home_pos_input = st.number_input("Posizione in classifica squadra di casa:", min_value=1, format="%d", value=1)
+            odd_home_input = st.number_input("Quota Home:", min_value=1.0, format="%f", value=1.0)
+            odd_draw_input = st.number_input("Quota Draw:", min_value=1.0, format="%f", value=1.0)
+            
+        with col2:
+            away_pos_input = st.number_input("Posizione in classifica squadra in trasferta:", min_value=1, format="%d", value=1)
+            odd_away_input = st.number_input("Quota Away:", min_value=1.0, format="%f", value=1.0)
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Prevedi Risultato"):
+                if home_pos_input and odd_home_input and odd_draw_input and away_pos_input and odd_away_input:
+                    with st.spinner('Calcolo della previsione...'):
+                        predictions = predict_single_match(model_pred, scaler_pred, home_pos_input, away_pos_input, odd_home_input, odd_draw_input, odd_away_input)
+                        if predictions is not None:
+                            st.subheader("Risultato della Previsione")
+                            st.metric(label="Probabilità di Vittoria Casa", value=f"{predictions[0]*100:.2f}%")
+                            st.metric(label="Probabilità di Pareggio", value=f"{predictions[1]*100:.2f}%")
+                            st.metric(label="Probabilità di Vittoria Trasferta", value=f"{predictions[2]*100:.2f}%")
+                            
+                            st.subheader("Quote Reali Calcolate dal Modello")
+                            st.metric(label="Quota Reale Home", value=f"{1/predictions[0]:.2f}")
+                            st.metric(label="Quota Reale Draw", value=f"{1/predictions[1]:.2f}")
+                            st.metric(label="Quota Reale Away", value=f"{1/predictions[2]:.2f}")
+                            
+                            st.subheader("Analisi della Value Bet per Esito")
+                            
+                            # Analisi Home
+                            st.markdown("**Home Win**")
+                            if (predictions[0] * odd_home_input) > 1:
+                                st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[0] * odd_home_input):.2f})")
+                            else:
+                                st.write("❌ Nessuna Value Bet in BACK")
+                            if odd_home_input > 1 and ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) > 1:
+                                st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))):.2f})")
+                            else:
+                                st.write("❌ Nessuna Value Bet in LAY")
 
-                    else:
-                        st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
+                            # Analisi Draw
+                            st.markdown("**Pareggio**")
+                            if (predictions[1] * odd_draw_input) > 1:
+                                st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[1] * odd_draw_input):.2f})")
+                            else:
+                                st.write("❌ Nessuna Value Bet in BACK")
+                            if odd_draw_input > 1 and ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) > 1:
+                                st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))):.2f})")
+                            else:
+                                st.write("❌ Nessuna Value Bet in LAY")
+
+                            # Analisi Away
+                            st.markdown("**Away Win**")
+                            if (predictions[2] * odd_away_input) > 1:
+                                st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[2] * odd_away_input):.2f})")
+                            else:
+                                st.write("❌ Nessuna Value Bet in BACK")
+                            if odd_away_input > 1 and ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) > 1:
+                                st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))):.2f})")
+                            else:
+                                st.write("❌ Nessuna Value Bet in LAY")
+                        else:
+                            st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
