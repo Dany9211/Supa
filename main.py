@@ -237,20 +237,45 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                         st.metric(label="Probabilità di Pareggio", value=f"{predictions[1]*100:.2f}%")
                         st.metric(label="Probabilità di Vittoria Trasferta", value=f"{predictions[2]*100:.2f}%")
                         
-                        st.subheader("Potenziali Value Bet")
-                        if (predictions[0] * odd_home_input) > 1:
-                            st.success(f"✅ **Value Bet BACK su HOME** (Valore: {predictions[0] * odd_home_input:.2f})")
-                        if (predictions[1] * odd_draw_input) > 1:
-                            st.success(f"✅ **Value Bet BACK su DRAW** (Valore: {predictions[1] * odd_draw_input:.2f})")
-                        if (predictions[2] * odd_away_input) > 1:
-                            st.success(f"✅ **Value Bet BACK su AWAY** (Valore: {predictions[2] * odd_away_input:.2f})")
+                        st.subheader("Quote Reali Calcolate dal Modello")
+                        st.metric(label="Quota Reale Home", value=f"{1/predictions[0]:.2f}")
+                        st.metric(label="Quota Reale Draw", value=f"{1/predictions[1]:.2f}")
+                        st.metric(label="Quota Reale Away", value=f"{1/predictions[2]:.2f}")
                         
+                        st.subheader("Analisi della Value Bet per Esito")
+                        
+                        # Analisi Home
+                        st.markdown("**Home Win**")
+                        if (predictions[0] * odd_home_input) > 1:
+                            st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[0] * odd_home_input):.2f})")
+                        else:
+                            st.write("❌ Nessuna Value Bet in BACK")
                         if odd_home_input > 1 and ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) > 1:
-                            st.success(f"✅ **Value Bet LAY su HOME** (Valore: {(predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1)):.2f})")
+                            st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))):.2f})")
+                        else:
+                            st.write("❌ Nessuna Value Bet in LAY")
+
+                        # Analisi Draw
+                        st.markdown("**Pareggio**")
+                        if (predictions[1] * odd_draw_input) > 1:
+                            st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[1] * odd_draw_input):.2f})")
+                        else:
+                            st.write("❌ Nessuna Value Bet in BACK")
                         if odd_draw_input > 1 and ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) > 1:
-                            st.success(f"✅ **Value Bet LAY su DRAW** (Valore: {(predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1)):.2f})")
+                            st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))):.2f})")
+                        else:
+                            st.write("❌ Nessuna Value Bet in LAY")
+
+                        # Analisi Away
+                        st.markdown("**Away Win**")
+                        if (predictions[2] * odd_away_input) > 1:
+                            st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[2] * odd_away_input):.2f})")
+                        else:
+                            st.write("❌ Nessuna Value Bet in BACK")
                         if odd_away_input > 1 and ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) > 1:
-                            st.success(f"✅ **Value Bet LAY su AWAY** (Valore: {(predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1)):.2f})")
+                            st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))):.2f})")
+                        else:
+                            st.write("❌ Nessuna Value Bet in LAY")
+
                     else:
                         st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
-
