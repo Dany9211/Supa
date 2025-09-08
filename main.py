@@ -225,6 +225,10 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
         
         model_pred = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
         model_pred.fit(scaler_pred.transform(X), y)
+        
+        # Calcolo l'accuratezza del modello sul test set per il campionato selezionato
+        y_test_pred = model_pred.predict(scaler_pred.transform(X))
+        accuracy = accuracy_score(y, y_test_pred)
 
         st.markdown(f"#### Inserisci i dati per la previsione ({selected_league})")
 
@@ -248,6 +252,10 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             st.metric(label="Probabilità di Pareggio", value=f"{predictions[1]*100:.2f}%")
                             st.metric(label="Probabilità di Vittoria Trasferta", value=f"{predictions[2]*100:.2f}%")
                             
+                            st.subheader("Informazioni sul Modello")
+                            st.metric(label="Accuratezza del Modello", value=f"{accuracy*100:.2f}%")
+                            st.metric(label="Numero di Campioni per l'Addestramento", value=f"{len(df_pred_filtered)}")
+                            
                             st.subheader("Quote Reali Calcolate dal Modello")
                             st.metric(label="Quota Reale Home", value=f"{1/predictions[0]:.2f}")
                             st.metric(label="Quota Reale Draw", value=f"{1/predictions[1]:.2f}")
@@ -264,13 +272,13 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             
                             if value_back_home > 1 and value_lay_home > 1:
                                 if value_back_home > value_lay_home:
-                                    st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
+                                    st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
                                 else:
-                                    st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
+                                    st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
                             elif value_back_home > 1:
-                                st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
+                                st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
                             elif value_lay_home > 1:
-                                st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
+                                st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
                             else:
                                 st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
 
@@ -283,13 +291,13 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             
                             if value_back_draw > 1 and value_lay_draw > 1:
                                 if value_back_draw > value_lay_draw:
-                                    st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
+                                    st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
                                 else:
-                                    st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
+                                    st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
                             elif value_back_draw > 1:
-                                st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
+                                st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
                             elif value_lay_draw > 1:
-                                st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
+                                st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
                             else:
                                 st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
 
@@ -302,15 +310,14 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
 
                             if value_back_away > 1 and value_lay_away > 1:
                                 if value_back_away > value_lay_away:
-                                    st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
+                                    st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
                                 else:
-                                    st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
+                                    st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
                             elif value_back_away > 1:
-                                st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
+                                st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
                             elif value_lay_away > 1:
-                                st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
+                                st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
                             else:
                                 st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
-
                         else:
                             st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
