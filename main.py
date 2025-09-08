@@ -256,68 +256,76 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             st.metric(label="Accuratezza del Modello", value=f"{accuracy*100:.2f}%")
                             st.metric(label="Numero di Campioni per l'Addestramento", value=f"{len(df_pred_filtered)}")
                             
-                            st.subheader("Quote Reali Calcolate dal Modello")
-                            st.metric(label="Quota Reale Home", value=f"{1/predictions[0]:.2f}")
-                            st.metric(label="Quota Reale Draw", value=f"{1/predictions[1]:.2f}")
-                            st.metric(label="Quota Reale Away", value=f"{1/predictions[2]:.2f}")
+                            st.subheader("Analisi della Value Bet")
                             
-                            st.subheader("Analisi della Value Bet per Esito")
-                            
-                            # Analisi Home
-                            st.markdown("**Home Win**")
+                            real_odds_home = 1/predictions[0]
+                            real_odds_draw = 1/predictions[1]
+                            real_odds_away = 1/predictions[2]
+
                             value_back_home = predictions[0] * odd_home_input
                             value_lay_home = 0
                             if odd_home_input > 1:
                                 value_lay_home = (predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))
-                            
-                            if value_back_home > 1 and value_lay_home > 1:
-                                if value_back_home > value_lay_home:
-                                    st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
-                                else:
-                                    st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
-                            elif value_back_home > 1:
-                                st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
-                            elif value_lay_home > 1:
-                                st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
-                            else:
-                                st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
 
-                            # Analisi Draw
-                            st.markdown("**Pareggio**")
                             value_back_draw = predictions[1] * odd_draw_input
                             value_lay_draw = 0
                             if odd_draw_input > 1:
                                 value_lay_draw = (predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))
-                            
-                            if value_back_draw > 1 and value_lay_draw > 1:
-                                if value_back_draw > value_lay_draw:
-                                    st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
-                                else:
-                                    st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
-                            elif value_back_draw > 1:
-                                st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
-                            elif value_lay_draw > 1:
-                                st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
-                            else:
-                                st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
 
-                            # Analisi Away
-                            st.markdown("**Away Win**")
                             value_back_away = predictions[2] * odd_away_input
                             value_lay_away = 0
                             if odd_away_input > 1:
                                 value_lay_away = (predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))
 
-                            if value_back_away > 1 and value_lay_away > 1:
-                                if value_back_away > value_lay_away:
-                                    st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
+                            # Display per Home
+                            col_home_1, col_home_2 = st.columns(2)
+                            with col_home_1:
+                                st.markdown(f"**Quota Reale Home:** {real_odds_home:.2f}")
+                            with col_home_2:
+                                if value_back_home > 1 and value_lay_home > 1:
+                                    if value_back_home > value_lay_home:
+                                        st.success(f"Value Bet in BACK ({value_back_home:.2f})")
+                                    else:
+                                        st.success(f"Value Bet in LAY ({value_lay_home:.2f})")
+                                elif value_back_home > 1:
+                                    st.success(f"Value Bet in BACK ({value_back_home:.2f})")
+                                elif value_lay_home > 1:
+                                    st.success(f"Value Bet in LAY ({value_lay_home:.2f})")
                                 else:
-                                    st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
-                            elif value_back_away > 1:
-                                st.write(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
-                            elif value_lay_away > 1:
-                                st.write(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
-                            else:
-                                st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
+                                    st.write("Nessuna Value Bet")
+
+                            # Display per Draw
+                            col_draw_1, col_draw_2 = st.columns(2)
+                            with col_draw_1:
+                                st.markdown(f"**Quota Reale Draw:** {real_odds_draw:.2f}")
+                            with col_draw_2:
+                                if value_back_draw > 1 and value_lay_draw > 1:
+                                    if value_back_draw > value_lay_draw:
+                                        st.success(f"Value Bet in BACK ({value_back_draw:.2f})")
+                                    else:
+                                        st.success(f"Value Bet in LAY ({value_lay_draw:.2f})")
+                                elif value_back_draw > 1:
+                                    st.success(f"Value Bet in BACK ({value_back_draw:.2f})")
+                                elif value_lay_draw > 1:
+                                    st.success(f"Value Bet in LAY ({value_lay_draw:.2f})")
+                                else:
+                                    st.write("Nessuna Value Bet")
+
+                            # Display per Away
+                            col_away_1, col_away_2 = st.columns(2)
+                            with col_away_1:
+                                st.markdown(f"**Quota Reale Away:** {real_odds_away:.2f}")
+                            with col_away_2:
+                                if value_back_away > 1 and value_lay_away > 1:
+                                    if value_back_away > value_lay_away:
+                                        st.success(f"Value Bet in BACK ({value_back_away:.2f})")
+                                    else:
+                                        st.success(f"Value Bet in LAY ({value_lay_away:.2f})")
+                                elif value_back_away > 1:
+                                    st.success(f"Value Bet in BACK ({value_back_away:.2f})")
+                                elif value_lay_away > 1:
+                                    st.success(f"Value Bet in LAY ({value_lay_away:.2f})")
+                                else:
+                                    st.write("Nessuna Value Bet")
                         else:
                             st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
