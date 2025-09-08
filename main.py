@@ -256,35 +256,59 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             
                             # Analisi Home
                             st.markdown("**Home Win**")
-                            if (predictions[0] * odd_home_input) > 1:
-                                st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[0] * odd_home_input):.2f})")
+                            value_back_home = predictions[0] * odd_home_input
+                            value_lay_home = 0
+                            if odd_home_input > 1:
+                                value_lay_home = (predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))
+                            
+                            if value_back_home > 1 and value_lay_home > 1:
+                                if value_back_home > value_lay_home:
+                                    st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
+                                else:
+                                    st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
+                            elif value_back_home > 1:
+                                st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_home:.2f})")
+                            elif value_lay_home > 1:
+                                st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_home:.2f})")
                             else:
-                                st.write("❌ Nessuna Value Bet in BACK")
-                            if odd_home_input > 1 and ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) > 1:
-                                st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))):.2f})")
-                            else:
-                                st.write("❌ Nessuna Value Bet in LAY")
+                                st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
 
                             # Analisi Draw
                             st.markdown("**Pareggio**")
-                            if (predictions[1] * odd_draw_input) > 1:
-                                st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[1] * odd_draw_input):.2f})")
+                            value_back_draw = predictions[1] * odd_draw_input
+                            value_lay_draw = 0
+                            if odd_draw_input > 1:
+                                value_lay_draw = (predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))
+                            
+                            if value_back_draw > 1 and value_lay_draw > 1:
+                                if value_back_draw > value_lay_draw:
+                                    st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
+                                else:
+                                    st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
+                            elif value_back_draw > 1:
+                                st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_draw:.2f})")
+                            elif value_lay_draw > 1:
+                                st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_draw:.2f})")
                             else:
-                                st.write("❌ Nessuna Value Bet in BACK")
-                            if odd_draw_input > 1 and ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) > 1:
-                                st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))):.2f})")
-                            else:
-                                st.write("❌ Nessuna Value Bet in LAY")
+                                st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
 
                             # Analisi Away
                             st.markdown("**Away Win**")
-                            if (predictions[2] * odd_away_input) > 1:
-                                st.success(f"✅ **Value Bet BACK** (Valore: {(predictions[2] * odd_away_input):.2f})")
+                            value_back_away = predictions[2] * odd_away_input
+                            value_lay_away = 0
+                            if odd_away_input > 1:
+                                value_lay_away = (predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))
+
+                            if value_back_away > 1 and value_lay_away > 1:
+                                if value_back_away > value_lay_away:
+                                    st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
+                                else:
+                                    st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
+                            elif value_back_away > 1:
+                                st.success(f"✅ **Value Bet in BACK** (Valore: {value_back_away:.2f})")
+                            elif value_lay_away > 1:
+                                st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
                             else:
-                                st.write("❌ Nessuna Value Bet in BACK")
-                            if odd_away_input > 1 and ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) > 1:
-                                st.success(f"✅ **Value Bet LAY** (Valore: {((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))):.2f})")
-                            else:
-                                st.write("❌ Nessuna Value Bet in LAY")
+                                st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
                         else:
                             st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
