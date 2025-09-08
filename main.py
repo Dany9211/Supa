@@ -94,7 +94,6 @@ def calculate_probabilities_and_value_bets(df):
 
         # Calcolo Value Bets (LAY)
         st.markdown("### Analisi Scommesse LAY (Contro)")
-        # La quota Lay è calcolata come: Quota Lay = Quota Back / (Quota Back - 1)
         value_bets_home_lay = X_test_with_proba[((X_test_with_proba['PredProbDraw'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSH']/(X_test_with_proba['PSH']-1)) > 1)]
         value_bets_draw_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSD']/(X_test_with_proba['PSD']-1)) > 1)]
         value_bets_away_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbDraw']) * (X_test_with_proba['PSA']/(X_test_with_proba['PSA']-1)) > 1)]
@@ -149,7 +148,8 @@ if uploaded_file is not None:
         if all(col in df.columns for col in required_cols):
             if st.button("Esegui Analisi Storica"):
                 with st.spinner('Elaborazione in corso...'):
-                    calculate_probabilities_and_value_bets(df)
+                    st.session_state.df_historical = df.copy()
+                    calculate_probabilities_and_value_bets(st.session_state.df_historical)
                 st.success('Analisi completata!')
         else:
             missing_cols = [col for col in required_cols if col not in df.columns]
@@ -160,20 +160,9 @@ if uploaded_file is not None:
 st.markdown("---")
 
 st.header("2. Previsione Nuova Partita")
-st.markdown("Inserisci manualmente i dati per prevedere le probabilità di un match futuro. **Nota**: Per utilizzare questa sezione, devi prima aver caricato un file CSV nella sezione 'Analisi su Dati Storici' per addestrare il modello.")
 
-if 'df_historical' not in st.session_state:
-    st.session_state.df_historical = None
-
-if uploaded_file is not None and st.button("Carica Dati per Previsione"):
-    try:
-        df_temp = pd.read_csv(uploaded_file, on_bad_lines='skip', engine='python')
-        st.session_state.df_historical = df_temp
-        st.success("Dati storici caricati con successo per la previsione!")
-    except Exception as e:
-        st.error(f"Errore nel caricamento dei dati per la previsione: {e}")
-
-if st.session_state.df_historical is not None:
+if 'df_historical' in st.session_state and st.session_state.df_historical is not None:
+    st.markdown("#### Inserisci i dati della partita")
     
     # Preparazione del modello per la previsione
     df_pred = st.session_state.df_historical.rename(columns={
@@ -203,8 +192,6 @@ if st.session_state.df_historical is not None:
     model_pred = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
     model_pred.fit(scaler_pred.transform(X), y)
 
-    st.markdown("#### Inserisci i dati della partita")
-    
     col1, col2 = st.columns(2)
     with col1:
         home_pos_input = st.number_input("Posizione in classifica squadra di casa:", min_value=1, format="%d", value=1)
@@ -233,11 +220,11 @@ if st.session_state.df_historical is not None:
                         if (predictions[2] * odd_away_input) > 1:
                             st.success(f"✅ **Value Bet BACK su AWAY** (Valore: {predictions[2] * odd_away_input:.2f})")
                         
-                        if ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) > 1:
+                        if odd_home_input > 1 and ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) > 1:
                             st.success(f"✅ **Value Bet LAY su HOME** (Valore: {(predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1)):.2f})")
-                        if ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) > 1:
+                        if odd_draw_input > 1 and ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) > 1:
                             st.success(f"✅ **Value Bet LAY su DRAW** (Valore: {(predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1)):.2f})")
-                        if ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) > 1:
+                        if odd_away_input > 1 and ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) > 1:
                             st.success(f"✅ **Value Bet LAY su AWAY** (Valore: {(predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1)):.2f})")
 
                     else:
