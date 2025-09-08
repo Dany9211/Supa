@@ -262,70 +262,28 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             real_odds_draw = 1/predictions[1]
                             real_odds_away = 1/predictions[2]
 
-                            value_back_home = predictions[0] * odd_home_input
-                            value_lay_home = 0
-                            if odd_home_input > 1:
-                                value_lay_home = (predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))
+                            st.write("**Home Win**")
+                            if real_odds_home < odd_home_input:
+                                st.success(f"Quota Reale: {real_odds_home:.2f} ➡️ **BACK**")
+                            elif odd_home_input > 1 and real_odds_home > odd_home_input:
+                                st.success(f"Quota Reale: {real_odds_home:.2f} ➡️ **LAY**")
+                            else:
+                                st.write(f"Quota Reale: {real_odds_home:.2f} ➡️ Nessuna Value Bet")
+                                
+                            st.write("**Pareggio**")
+                            if real_odds_draw < odd_draw_input:
+                                st.success(f"Quota Reale: {real_odds_draw:.2f} ➡️ **BACK**")
+                            elif odd_draw_input > 1 and real_odds_draw > odd_draw_input:
+                                st.success(f"Quota Reale: {real_odds_draw:.2f} ➡️ **LAY**")
+                            else:
+                                st.write(f"Quota Reale: {real_odds_draw:.2f} ➡️ Nessuna Value Bet")
 
-                            value_back_draw = predictions[1] * odd_draw_input
-                            value_lay_draw = 0
-                            if odd_draw_input > 1:
-                                value_lay_draw = (predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))
-
-                            value_back_away = predictions[2] * odd_away_input
-                            value_lay_away = 0
-                            if odd_away_input > 1:
-                                value_lay_away = (predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))
-
-                            # Display per Home
-                            col_home_1, col_home_2 = st.columns(2)
-                            with col_home_1:
-                                st.markdown(f"**Quota Reale Home:** {real_odds_home:.2f}")
-                            with col_home_2:
-                                if value_back_home > 1 and value_lay_home > 1:
-                                    if value_back_home > value_lay_home:
-                                        st.success(f"Value Bet in BACK ({value_back_home:.2f})")
-                                    else:
-                                        st.success(f"Value Bet in LAY ({value_lay_home:.2f})")
-                                elif value_back_home > 1:
-                                    st.success(f"Value Bet in BACK ({value_back_home:.2f})")
-                                elif value_lay_home > 1:
-                                    st.success(f"Value Bet in LAY ({value_lay_home:.2f})")
-                                else:
-                                    st.write("Nessuna Value Bet")
-
-                            # Display per Draw
-                            col_draw_1, col_draw_2 = st.columns(2)
-                            with col_draw_1:
-                                st.markdown(f"**Quota Reale Draw:** {real_odds_draw:.2f}")
-                            with col_draw_2:
-                                if value_back_draw > 1 and value_lay_draw > 1:
-                                    if value_back_draw > value_lay_draw:
-                                        st.success(f"Value Bet in BACK ({value_back_draw:.2f})")
-                                    else:
-                                        st.success(f"Value Bet in LAY ({value_lay_draw:.2f})")
-                                elif value_back_draw > 1:
-                                    st.success(f"Value Bet in BACK ({value_back_draw:.2f})")
-                                elif value_lay_draw > 1:
-                                    st.success(f"Value Bet in LAY ({value_lay_draw:.2f})")
-                                else:
-                                    st.write("Nessuna Value Bet")
-
-                            # Display per Away
-                            col_away_1, col_away_2 = st.columns(2)
-                            with col_away_1:
-                                st.markdown(f"**Quota Reale Away:** {real_odds_away:.2f}")
-                            with col_away_2:
-                                if value_back_away > 1 and value_lay_away > 1:
-                                    if value_back_away > value_lay_away:
-                                        st.success(f"Value Bet in BACK ({value_back_away:.2f})")
-                                    else:
-                                        st.success(f"Value Bet in LAY ({value_lay_away:.2f})")
-                                elif value_back_away > 1:
-                                    st.success(f"Value Bet in BACK ({value_back_away:.2f})")
-                                elif value_lay_away > 1:
-                                    st.success(f"Value Bet in LAY ({value_lay_away:.2f})")
-                                else:
-                                    st.write("Nessuna Value Bet")
+                            st.write("**Away Win**")
+                            if real_odds_away < odd_away_input:
+                                st.success(f"Quota Reale: {real_odds_away:.2f} ➡️ **BACK**")
+                            elif odd_away_input > 1 and real_odds_away > odd_away_input:
+                                st.success(f"Quota Reale: {real_odds_away:.2f} ➡️ **LAY**")
+                            else:
+                                st.write(f"Quota Reale: {real_odds_away:.2f} ➡️ Nessuna Value Bet")
                         else:
                             st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
