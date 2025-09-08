@@ -179,6 +179,7 @@ st.markdown("---")
 st.header("2. Previsione Nuova Partita")
 
 if 'df_historical' in st.session_state and st.session_state.df_historical is not None:
+    
     # Preparazione del modello per la previsione
     df_pred = st.session_state.df_historical.rename(columns={
         'League': 'league', 'Home_Team': 'HomeTeam', 'Away_Team': 'AwayTeam',
@@ -310,5 +311,6 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                                 st.success(f"✅ **Value Bet in LAY** (Valore: {value_lay_away:.2f})")
                             else:
                                 st.info("ℹ️ Nessuna Value Bet trovata per questo esito.")
+
                         else:
                             st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
