@@ -25,7 +25,10 @@ def calculate_probabilities_and_value_bets(df):
 
     # Conversione delle colonne delle quote in numeri (sostituendo la virgola con il punto)
     for col in ['PSH', 'PSD', 'PSA']:
-        df[col] = df[col].astype(str).str.replace(',', '.', regex=False).astype(float)
+        df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
+        # Sostituisci i valori non validi (es. vuoti o zero) con NaN
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+        df[col] = df[col].replace(0, np.nan)
     
     # Codifica dei risultati in numeri (0: vittoria casa, 1: pareggio, 2: vittoria trasferta)
     def result_to_numeric(row):
@@ -164,4 +167,4 @@ if uploaded_file is not None:
             missing_cols = [col for col in required_cols if col not in df.columns]
             st.error(f"Il file CSV deve contenere le seguenti colonne. Mancano: {', '.join(missing_cols)}")
     except Exception as e:
-        st.error(f"Errore durante la lettura del file: {e}. Controlla il formato del file o il delimitatore.")
+        st.error(f"Errore durante la lettura del file: {e}")
