@@ -7,7 +7,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 
 # Funzione principale per l'analisi del modello (parte 1)
-def calculate_probabilities_and_value_bets(df):
+def calculate_probabilities_and_value_bets(df, ranking_option):
     
     # Rinominare le colonne per coerenza
     df = df.rename(columns={
@@ -19,8 +19,10 @@ def calculate_probabilities_and_value_bets(df):
         'Odd_Home': 'PSH',
         'Odd_Draw': 'PSD',
         'Odd__Away': 'PSA',
-        'Home_Pos_Tot': 'HomePos',
-        'Away_Pos_Tot': 'AwayPos'
+        'Home_Pos_Tot': 'HomePos_Tot',
+        'Away_Pos_Tot': 'AwayPos_Tot',
+        'Home_Pos_H': 'HomePos_H',
+        'Away_Pos_A': 'AwayPos_A'
     })
 
     # Conversione delle colonne delle quote in numeri
@@ -43,6 +45,14 @@ def calculate_probabilities_and_value_bets(df):
     df['HomeOddsProb'] = 1 / df['PSH']
     df['DrawOddsProb'] = 1 / df['PSD']
     df['AwayOddsProb'] = 1 / df['PSA']
+    
+    # Selezione delle colonne per la classifica in base all'opzione scelta
+    if ranking_option == 'Classifica Totale':
+        df['HomePos'] = df['HomePos_Tot']
+        df['AwayPos'] = df['AwayPos_Tot']
+    else: # Classifica per Casa/Trasferta
+        df['HomePos'] = df['HomePos_H']
+        df['AwayPos'] = df['AwayPos_A']
     
     features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos']
     results_df = pd.DataFrame()
@@ -116,7 +126,7 @@ def calculate_probabilities_and_value_bets(df):
     st.dataframe(results_df)
 
 # Funzione per prevedere una singola partita (parte 2)
-def predict_single_match(model, scaler, home_pos, away_pos, odd_home, odd_draw, odd_away):
+def predict_single_match(model, scaler, ranking_option, home_pos, away_pos, odd_home, odd_draw, odd_away):
     try:
         data = [[1/odd_home, 1/odd_draw, 1/odd_away, home_pos, away_pos]]
         new_match_df = pd.DataFrame(data, columns=['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos'])
@@ -137,19 +147,26 @@ st.markdown("---")
 
 st.header("1. Analisi su Dati Storici (BACK & LAY)")
 st.markdown("Carica un file CSV per testare il modello su un dataset completo e valutare il ROI.")
+
 uploaded_file = st.file_uploader("Scegli un file CSV", type="csv")
 if uploaded_file is not None:
+    ranking_option = st.selectbox(
+        "Scegli il tipo di classifica da utilizzare:",
+        ('Classifica Totale', 'Classifica per Casa/Trasferta')
+    )
+    
     try:
         df = pd.read_csv(uploaded_file, on_bad_lines='skip', engine='python')
         st.write("Anteprima dei dati caricati:")
         st.dataframe(df.head())
         
-        required_cols = ['League', 'Home_Team', 'Away_Team', 'Gol_Home_FT', 'Gol_Away_FT', 'Odd_Home', 'Odd_Draw', 'Odd__Away', 'Home_Pos_Tot', 'Away_Pos_Tot']
+        required_cols = ['League', 'Home_Team', 'Away_Team', 'Gol_Home_FT', 'Gol_Away_FT', 'Odd_Home', 'Odd_Draw', 'Odd__Away', 'Home_Pos_Tot', 'Away_Pos_Tot', 'Home_Pos_H', 'Away_Pos_A']
         if all(col in df.columns for col in required_cols):
             if st.button("Esegui Analisi Storica"):
                 with st.spinner('Elaborazione in corso...'):
                     st.session_state.df_historical = df.copy()
-                    calculate_probabilities_and_value_bets(st.session_state.df_historical)
+                    st.session_state.ranking_option = ranking_option
+                    calculate_probabilities_and_value_bets(st.session_state.df_historical, st.session_state.ranking_option)
                 st.success('Analisi completata!')
         else:
             missing_cols = [col for col in required_cols if col not in df.columns]
@@ -162,14 +179,15 @@ st.markdown("---")
 st.header("2. Previsione Nuova Partita")
 
 if 'df_historical' in st.session_state and st.session_state.df_historical is not None:
-    st.markdown("#### Inserisci i dati della partita")
+    st.markdown(f"#### Inserisci i dati della partita (usando la {st.session_state.ranking_option.lower()})")
     
     # Preparazione del modello per la previsione
     df_pred = st.session_state.df_historical.rename(columns={
         'League': 'league', 'Home_Team': 'HomeTeam', 'Away_Team': 'AwayTeam',
         'Gol_Home_FT': 'FTHG', 'Gol_Away_FT': 'FTAG', 'Odd_Home': 'PSH',
         'Odd_Draw': 'PSD', 'Odd__Away': 'PSA',
-        'Home_Pos_Tot': 'HomePos', 'Away_Pos_Tot': 'AwayPos'
+        'Home_Pos_Tot': 'HomePos_Tot', 'Away_Pos_Tot': 'AwayPos_Tot',
+        'Home_Pos_H': 'HomePos_H', 'Away_Pos_A': 'AwayPos_A'
     })
     for col in ['PSH', 'PSD', 'PSA']:
         df_pred[col] = df_pred[col].astype(str).str.replace(',', '.', regex=False)
@@ -177,6 +195,13 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
         df_pred[col] = df_pred[col].replace(0, np.nan)
     df_pred['Result'] = df_pred.apply(lambda row: 0 if row['FTHG'] > row['FTAG'] else (1 if row['FTHG'] == row['FTAG'] else 2), axis=1)
 
+    if st.session_state.ranking_option == 'Classifica Totale':
+        df_pred['HomePos'] = df_pred['HomePos_Tot']
+        df_pred['AwayPos'] = df_pred['AwayPos_Tot']
+    else:
+        df_pred['HomePos'] = df_pred['HomePos_H']
+        df_pred['AwayPos'] = df_pred['AwayPos_A']
+    
     features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos']
     df_pred['HomeOddsProb'] = 1 / df_pred['PSH']
     df_pred['DrawOddsProb'] = 1 / df_pred['PSD']
@@ -201,11 +226,11 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
     with col2:
         away_pos_input = st.number_input("Posizione in classifica squadra in trasferta:", min_value=1, format="%d", value=1)
         odd_away_input = st.number_input("Quota Away:", min_value=1.0, format="%f", value=1.0)
-        st.markdown("<br>", unsafe_allow_html=True) # Spaziatore
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Prevedi Risultato"):
             if home_pos_input and odd_home_input and odd_draw_input and away_pos_input and odd_away_input:
                 with st.spinner('Calcolo della previsione...'):
-                    predictions = predict_single_match(model_pred, scaler_pred, home_pos_input, away_pos_input, odd_home_input, odd_draw_input, odd_away_input)
+                    predictions = predict_single_match(model_pred, scaler_pred, st.session_state.ranking_option, home_pos_input, away_pos_input, odd_home_input, odd_draw_input, odd_away_input)
                     if predictions is not None:
                         st.subheader("Risultato della Previsione")
                         st.metric(label="Probabilità di Vittoria Casa", value=f"{predictions[0]*100:.2f}%")
@@ -226,7 +251,6 @@ if 'df_historical' in st.session_state and st.session_state.df_historical is not
                             st.success(f"✅ **Value Bet LAY su DRAW** (Valore: {(predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1)):.2f})")
                         if odd_away_input > 1 and ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) > 1:
                             st.success(f"✅ **Value Bet LAY su AWAY** (Valore: {(predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1)):.2f})")
-
                     else:
                         st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
 
