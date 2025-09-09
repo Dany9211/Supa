@@ -1,324 +1,112 @@
-import pandas as pd
-import numpy as np
 import streamlit as st
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import StandardScaler
+import pandas as pd
+import io
 
-# Funzione principale per l'analisi del modello (parte 1)
-def calculate_probabilities_and_value_bets(df, ranking_option):
+def pulisci_e_formatta_df(df):
+    """
+    Funzione per pulire e formattare un DataFrame di pandas.
+    - Rimuove le righe duplicate.
+    - Estrae e riposiziona le colonne 'giorno', 'mese', 'anno' da 'date_GMT'.
+    - Ordina il DataFrame per 'timestamp' se la colonna esiste.
+    """
     
-    # Rinominare le colonne per coerenza
-    df = df.rename(columns={
-        'League': 'league',
-        'Home_Team': 'HomeTeam',
-        'Away_Team': 'AwayTeam',
-        'Gol_Home_FT': 'FTHG',
-        'Gol_Away_FT': 'FTAG',
-        'Odd_Home': 'PSH',
-        'Odd_Draw': 'PSD',
-        'Odd__Away': 'PSA',
-        'Odd_over_2.5': 'Odd_Over_2_5',
-        'Giornata': 'Giornata',
-        'Home_Pos_Tot': 'HomePos_Tot',
-        'Away_Pos_Tot': 'AwayPos_Tot',
-        'Home_Pos_H': 'HomePos_H',
-        'Away_Pos_A': 'AwayPos_A'
-    })
-
-    # Conversione delle colonne delle quote in numeri
-    for col in ['PSH', 'PSD', 'PSA', 'Odd_Over_2_5']:
-        df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-        df[col] = df[col].replace(0, np.nan)
+    # 1. Rimozione righe duplicate
+    righe_iniziali = len(df)
+    df.drop_duplicates(inplace=True)
+    duplicati_rimossi = righe_iniziali - len(df)
     
-    # Codifica dei risultati in numeri
-    def result_to_numeric(row):
-        if row['FTHG'] > row['FTAG']:
-            return 0
-        elif row['FTHG'] == row['FTAG']:
-            return 1
-        else:
-            return 2
-    df['Result'] = df.apply(result_to_numeric, axis=1)
-
-    # Feature engineering
-    df['HomeOddsProb'] = 1 / df['PSH']
-    df['DrawOddsProb'] = 1 / df['PSD']
-    df['AwayOddsProb'] = 1 / df['PSA']
+    st.write(f"✅ Rimosse **{duplicati_rimossi}** righe doppione.")
     
-    # Selezione delle colonne per la classifica in base all'opzione scelta
-    if ranking_option == 'Classifica Totale':
-        df['HomePos'] = df['HomePos_Tot']
-        df['AwayPos'] = df['AwayPos_Tot']
-    else: # Classifica per Casa/Trasferta
-        df['HomePos'] = df['HomePos_H']
-        df['AwayPos'] = df['AwayPos_A']
-    
-    features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos', 'Odd_Over_2_5', 'Giornata']
-    results_df = pd.DataFrame()
+    # 2. Estrazione e riposizionamento di Giorno, Mese, Anno
+    if 'date_GMT' in df.columns:
+        try:
+            df['date_GMT'] = df['date_GMT'].astype(str).str.split(' - ').str[0]
+            parts = df['date_GMT'].str.split(' ', expand=True)
+            df['giorno'] = parts[1]
+            df['mese'] = parts[0]
+            df['anno'] = parts[2]
+            
+            # Riordina le colonne
+            if 'attendance' in df.columns:
+                idx_attendance = df.columns.get_loc('attendance')
+                cols = df.columns.tolist()
+                new_cols = cols[:idx_attendance] + ['giorno', 'mese', 'anno'] + cols[idx_attendance:]
+                df = df.reindex(columns=new_cols)
+            
+            df.drop(columns=['date_GMT'], inplace=True)
+            st.write("✅ Colonne 'giorno', 'mese' e 'anno' create e 'date_GMT' rimossa.")
+        except Exception as e:
+            st.warning(f"⚠️ ERRORE durante l'elaborazione della colonna 'date_GMT': {e}")
+    else:
+        st.info("ℹ️ AVVISO: Colonna 'date_GMT' non trovata.")
 
-    for league in df['league'].unique():
-        st.subheader(f'Campionato: {league}')
+    # 3. Ordinamento per timestamp
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
+        df.sort_values(by='timestamp', inplace=True)
+        st.write("✅ Dataset ordinato cronologicamente.")
         
-        league_df = df[df['league'] == league].copy()
-        league_df.dropna(subset=features, inplace=True)
-        if league_df.empty or len(league_df) < 10:
-            st.warning(f'Dati insufficienti o non validi per il campionato {league}.')
-            continue
+    return df
 
-        X = league_df[features]
-        y = league_df['Result']
+def to_csv(df):
+    """Converte un DataFrame in un formato CSV in memoria per il download."""
+    output = io.StringIO()
+    df.to_csv(output, index=False, sep=';', decimal=',', encoding='utf-8-sig')
+    return output.getvalue().encode('utf-8-sig')
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# --- Struttura dell'App Streamlit ---
+st.set_page_config(page_title="CSV Cleaner", page_icon="🧹")
+st.title("🧹 Pulitore e Formattatore di File CSV")
+st.markdown("Carica un file CSV per pulirlo, rimuovere i duplicati, e formattare la colonna 'date_GMT'.")
 
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        
-        model = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
-        model.fit(X_train_scaled, y_train)
+# Componente per caricare il file
+uploaded_file = st.file_uploader(
+    "Carica un file CSV",
+    type=["csv"],
+    help="Supporta i delimitatori ';' e ',' e la codifica UTF-8 o Latin-1."
+)
 
-        y_pred_proba = model.predict_proba(X_test_scaled)
-        
-        X_test_with_proba = X_test.copy()
-        X_test_with_proba['PredProbHome'] = y_pred_proba[:, 0]
-        X_test_with_proba['PredProbDraw'] = y_pred_proba[:, 1]
-        X_test_with_proba['PredProbAway'] = y_pred_proba[:, 2]
-
-        test_df_original = league_df.loc[X_test_with_proba.index]
-        X_test_with_proba = pd.concat([test_df_original[['HomeTeam', 'AwayTeam', 'PSH', 'PSD', 'PSA', 'Result']], X_test_with_proba], axis=1)
-
-        # Calcolo Value Bets (BACK)
-        st.markdown("### Analisi Scommesse BACK (A Favore)")
-        # L'EV > 0
-        value_bets_home_back = X_test_with_proba[(X_test_with_proba['PredProbHome'] * X_test_with_proba['PSH'] > 1)]
-        value_bets_draw_back = X_test_with_proba[(X_test_with_proba['PredProbDraw'] * X_test_with_proba['PSD'] > 1)]
-        value_bets_away_back = X_test_with_proba[(X_test_with_proba['PredProbAway'] * X_test_with_proba['PSA'] > 1)]
-
-        roi_home_back = (value_bets_home_back[value_bets_home_back['Result'] == 0]['PSH'].sum() - len(value_bets_home_back)) / len(value_bets_home_back) * 100 if len(value_bets_home_back) > 0 else 0
-        roi_draw_back = (value_bets_draw_back[value_bets_draw_back['Result'] == 1]['PSD'].sum() - len(value_bets_draw_back)) / len(value_bets_draw_back) * 100 if len(value_bets_draw_back) > 0 else 0
-        roi_away_back = (value_bets_away_back[value_bets_away_back['Result'] == 2]['PSA'].sum() - len(value_bets_away_back)) / len(value_bets_away_back) * 100 if len(value_bets_away_back) > 0 else 0
-
-        st.write(f"ROI Home: **{roi_home_back:.2f}%** ({len(value_bets_home_back)} scommesse)")
-        st.write(f"ROI Draw: **{roi_draw_back:.2f}%** ({len(value_bets_draw_back)} scommesse)")
-        st.write(f"ROI Away: **{roi_away_back:.2f}%** ({len(value_bets_away_back)} scommesse)")
-
-        # Calcolo Value Bets (LAY)
-        st.markdown("### Analisi Scommesse LAY (Contro)")
-        value_bets_home_lay = X_test_with_proba[((X_test_with_proba['PredProbDraw'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSH']/(X_test_with_proba['PSH']-1)) > 1)]
-        value_bets_draw_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbAway']) * (X_test_with_proba['PSD']/(X_test_with_proba['PSD']-1)) > 1)]
-        value_bets_away_lay = X_test_with_proba[((X_test_with_proba['PredProbHome'] + X_test_with_proba['PredProbDraw']) * (X_test_with_proba['PSA']/(X_test_with_proba['PSA']-1)) > 1)]
-        
-        roi_home_lay = (len(value_bets_home_lay[value_bets_home_lay['Result'] != 0]) - len(value_bets_home_lay[value_bets_home_lay['Result'] == 0]) * (value_bets_home_lay['PSH']-1).mean()) / len(value_bets_home_lay) * 100 if len(value_bets_home_lay) > 0 else 0
-        roi_draw_lay = (len(value_bets_draw_lay[value_bets_draw_lay['Result'] != 1]) - len(value_bets_draw_lay[value_bets_draw_lay['Result'] == 1]) * (value_bets_draw_lay['PSD']-1).mean()) / len(value_bets_draw_lay) * 100 if len(value_bets_draw_lay) > 0 else 0
-        roi_away_lay = (len(value_bets_away_lay[value_bets_away_lay['Result'] != 2]) - len(value_bets_away_lay[value_bets_away_lay['Result'] == 2]) * (value_bets_away_lay['PSA']-1).mean()) / len(value_bets_away_lay) * 100 if len(value_bets_away_lay) > 0 else 0
-
-        st.write(f"ROI Lay Home: **{roi_home_lay:.2f}%** ({len(value_bets_home_lay)} scommesse)")
-        st.write(f"ROI Lay Draw: **{roi_draw_lay:.2f}%** ({len(value_bets_draw_lay)} scommesse)")
-        st.write(f"ROI Lay Away: **{roi_away_lay:.2f}%** ({len(value_bets_away_lay)} scommesse)")
-        
-        results_df = pd.concat([results_df, pd.DataFrame([{
-            'Campionato': league, 'ROI Home Back': roi_home_back, 'ROI Draw Back': roi_draw_back, 'ROI Away Back': roi_away_back,
-            'ROI Home Lay': roi_home_lay, 'ROI Draw Lay': roi_draw_lay, 'ROI Away Lay': roi_away_lay
-        }])], ignore_index=True)
-    
-    st.markdown("---")
-    st.markdown("## Riepilogo dei Risultati per Campionato")
-    st.dataframe(results_df)
-
-# Funzione per prevedere una singola partita (parte 2)
-def predict_single_match(model, scaler, home_pos, away_pos, odd_home, odd_draw, odd_away, odd_over_2_5, giornata):
-    try:
-        data = [[1/odd_home, 1/odd_draw, 1/odd_away, home_pos, away_pos, odd_over_2_5, giornata]]
-        new_match_df = pd.DataFrame(data, columns=['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos', 'Odd_Over_2_5', 'Giornata'])
-        
-        new_match_scaled = scaler.transform(new_match_df)
-        pred_proba = model.predict_proba(new_match_scaled)[0]
-        
-        return pred_proba
-    except Exception as e:
-        return None
-
-# Interfaccia Streamlit
-st.title('Modello Predittivo di Value Bet')
-
-st.markdown("Questo strumento è diviso in due sezioni: una per l'analisi su dati storici e una per la previsione di una nuova partita singola.")
-
-st.markdown("---")
-
-st.header("1. Analisi su Dati Storici (BACK & LAY)")
-st.markdown("Carica un file CSV per testare il modello su un dataset completo e valutare il ROI.")
-
-uploaded_file = st.file_uploader("Scegli un file CSV", type="csv")
 if uploaded_file is not None:
-    ranking_option = st.selectbox(
-        "Scegli il tipo di classifica da utilizzare:",
-        ('Classifica Totale', 'Classifica per Casa/Trasferta')
-    )
-    
-    try:
-        df = pd.read_csv(uploaded_file, on_bad_lines='skip', engine='python')
-        st.write("Anteprima dei dati caricati:")
-        st.dataframe(df.head())
-        
-        required_cols = ['League', 'Home_Team', 'Away_Team', 'Gol_Home_FT', 'Gol_Away_FT', 'Odd_Home', 'Odd_Draw', 'Odd__Away', 'Odd_over_2.5', 'Giornata', 'Home_Pos_Tot', 'Away_Pos_Tot', 'Home_Pos_H', 'Away_Pos_A']
-        if all(col in df.columns for col in required_cols):
-            if st.button("Esegui Analisi Storica"):
-                with st.spinner('Elaborazione in corso...'):
-                    st.session_state.df_historical = df.copy()
-                    st.session_state.ranking_option = ranking_option
-                    calculate_probabilities_and_value_bets(st.session_state.df_historical, st.session_state.ranking_option)
-                st.success('Analisi completata!')
-        else:
-            missing_cols = [col for col in required_cols if col not in df.columns]
-            st.error(f"Il file CSV deve contenere le seguenti colonne. Mancano: {', '.join(missing_cols)}")
-    except Exception as e:
-        st.error(f"Errore durante la lettura del file: {e}")
+    # Mostra l'indicatore di caricamento
+    with st.spinner('Caricamento e lettura del file...'):
+        try:
+            # Tenta di leggere il file con diversi delimitatori e codifiche
+            try:
+                # Prova il punto e virgola (formato italiano)
+                df = pd.read_csv(uploaded_file, sep=';', low_memory=False, on_bad_lines='skip')
+                if df.shape[1] == 1:
+                    # Se non funziona, prova la virgola
+                    uploaded_file.seek(0) # Riporta il "puntatore" all'inizio del file
+                    df = pd.read_csv(uploaded_file, sep=',', low_memory=False, on_bad_lines='skip')
+            except UnicodeDecodeError:
+                # Prova la codifica Latin-1 se la prima fallisce
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, sep=';', encoding='latin-1', low_memory=False, on_bad_lines='skip')
+                if df.shape[1] == 1:
+                    uploaded_file.seek(0)
+                    df = pd.read_csv(uploaded_file, sep=',', encoding='latin-1', low_memory=False, on_bad_lines='skip')
 
-st.markdown("---")
+            st.success("🎉 File letto con successo!")
+            st.write("### Anteprima del file originale")
+            st.dataframe(df.head())
 
-st.header("2. Previsione Nuova Partita")
-
-if 'df_historical' in st.session_state and st.session_state.df_historical is not None:
-    
-    # Preparazione del modello per la previsione
-    df_pred = st.session_state.df_historical.rename(columns={
-        'League': 'league', 'Home_Team': 'HomeTeam', 'Away_Team': 'AwayTeam',
-        'Gol_Home_FT': 'FTHG', 'Gol_Away_FT': 'FTAG', 'Odd_Home': 'PSH',
-        'Odd_Draw': 'PSD', 'Odd__Away': 'PSA',
-        'Odd_over_2.5': 'Odd_Over_2_5',
-        'Giornata': 'Giornata',
-        'Home_Pos_Tot': 'HomePos_Tot', 'Away_Pos_Tot': 'AwayPos_Tot',
-        'Home_Pos_H': 'HomePos_H', 'Away_Pos_A': 'AwayPos_A'
-    })
-    for col in ['PSH', 'PSD', 'PSA', 'Odd_Over_2_5']:
-        df_pred[col] = df_pred[col].astype(str).str.replace(',', '.', regex=False)
-        df_pred[col] = pd.to_numeric(df_pred[col], errors='coerce')
-        df_pred[col] = df_pred[col].replace(0, np.nan)
-    df_pred['Result'] = df_pred.apply(lambda row: 0 if row['FTHG'] > row['FTAG'] else (1 if row['FTHG'] == row['FTAG'] else 2), axis=1)
-
-    if st.session_state.ranking_option == 'Classifica Totale':
-        df_pred['HomePos'] = df_pred['HomePos_Tot']
-        df_pred['AwayPos'] = df_pred['AwayPos_Tot']
-    else:
-        df_pred['HomePos'] = df_pred['HomePos_H']
-        df_pred['AwayPos'] = df_pred['AwayPos_A']
-    
-    features = ['HomeOddsProb', 'DrawOddsProb', 'AwayOddsProb', 'HomePos', 'AwayPos', 'Odd_Over_2_5', 'Giornata']
-    df_pred['HomeOddsProb'] = 1 / df_pred['PSH']
-    df_pred['DrawOddsProb'] = 1 / df_pred['PSD']
-    df_pred['AwayOddsProb'] = 1 / df_pred['PSA']
-    df_pred.dropna(subset=features, inplace=True)
-    
-    # Aggiunge il selettore per il campionato
-    available_leagues = df_pred['league'].unique()
-    selected_league = st.selectbox("Scegli un campionato per la previsione:", available_leagues)
-
-    # Filtra i dati per il campionato selezionato prima di addestrare il modello
-    df_pred_filtered = df_pred[df_pred['league'] == selected_league].copy()
-    
-    if df_pred_filtered.empty or len(df_pred_filtered) < 10:
-        st.warning(f"Dati insufficienti o non validi per il campionato {selected_league}. Scegli un altro campionato.")
-    else:
-        X = df_pred_filtered[features]
-        y = df_pred_filtered['Result']
-        
-        scaler_pred = StandardScaler()
-        scaler_pred.fit(X)
-        
-        model_pred = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
-        model_pred.fit(scaler_pred.transform(X), y)
-        
-        # Calcolo l'accuratezza del modello sul test set per il campionato selezionato
-        y_test_pred = model_pred.predict(scaler_pred.transform(X))
-        accuracy = accuracy_score(y, y_test_pred)
-
-        st.markdown(f"#### Inserisci i dati per la previsione ({selected_league})")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            home_pos_input = st.number_input("Posizione in classifica squadra di casa:", min_value=1, format="%d", value=1)
-            odd_home_input = st.number_input("Quota Home:", min_value=1.0, format="%f", value=1.0)
-            odd_draw_input = st.number_input("Quota Draw:", min_value=1.0, format="%f", value=1.0)
+            # Elabora il DataFrame
+            df_pulito = pulisci_e_formatta_df(df.copy())
             
-        with col2:
-            away_pos_input = st.number_input("Posizione in classifica squadra in trasferta:", min_value=1, format="%d", value=1)
-            odd_away_input = st.number_input("Quota Away:", min_value=1.0, format="%f", value=1.0)
-            odd_over_2_5_input = st.number_input("Quota Over 2.5:", min_value=1.0, format="%f", value=1.0)
-            giornata_input = st.number_input("Giornata:", min_value=1, format="%d", value=1)
+            st.write("---")
+            st.write("### Anteprima del file pulito e formattato")
+            st.dataframe(df_pulito.head())
+
+            # Pulsante per il download del file elaborato
+            csv_data = to_csv(df_pulito)
             
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("Prevedi Risultato"):
-                if home_pos_input and odd_home_input and odd_draw_input and away_pos_input and odd_away_input and odd_over_2_5_input and giornata_input:
-                    with st.spinner('Calcolo della previsione...'):
-                        predictions = predict_single_match(model_pred, scaler_pred, home_pos_input, away_pos_input, odd_home_input, odd_draw_input, odd_away_input, odd_over_2_5_input, giornata_input)
-                        if predictions is not None:
-                            st.subheader("Risultato della Previsione")
-                            st.metric(label="Probabilità di Vittoria Casa", value=f"{predictions[0]*100:.2f}%")
-                            st.metric(label="Probabilità di Pareggio", value=f"{predictions[1]*100:.2f}%")
-                            st.metric(label="Probabilità di Vittoria Trasferta", value=f"{predictions[2]*100:.2f}%")
-                            
-                            st.subheader("Informazioni sul Modello")
-                            st.metric(label="Accuratezza del Modello", value=f"{accuracy*100:.2f}%")
-                            st.metric(label="Numero di Campioni per l'Addestramento", value=f"{len(df_pred_filtered)}")
-                            
-                            st.subheader("Analisi della Value Bet")
-                            
-                            real_odds_home = 1/predictions[0]
-                            real_odds_draw = 1/predictions[1]
-                            real_odds_away = 1/predictions[2]
+            st.download_button(
+                label="📥 Scarica il file CSV pulito",
+                data=csv_data,
+                file_name=f'pulito_{uploaded_file.name}',
+                mime='text/csv',
+            )
 
-                            ev_back_home = (predictions[0] * odd_home_input) - 1
-                            ev_lay_home = ((predictions[1] + predictions[2]) * (odd_home_input/(odd_home_input-1))) - 1 if odd_home_input > 1 else -1
-
-                            ev_back_draw = (predictions[1] * odd_draw_input) - 1
-                            ev_lay_draw = ((predictions[0] + predictions[2]) * (odd_draw_input/(odd_draw_input-1))) - 1 if odd_draw_input > 1 else -1
-
-                            ev_back_away = (predictions[2] * odd_away_input) - 1
-                            ev_lay_away = ((predictions[0] + predictions[1]) * (odd_away_input/(odd_away_input-1))) - 1 if odd_away_input > 1 else -1
-                            
-                            # Analisi Home
-                            st.markdown("**Home Win**")
-                            col_home_1, col_home_2 = st.columns(2)
-                            with col_home_1:
-                                st.write(f"Quota Reale: {real_odds_home:.2f}")
-                            with col_home_2:
-                                if ev_back_home >= 0.10:
-                                    st.success(f"✅ Value Bet BACK (EV: {ev_back_home*100:.2f}%)")
-                                elif ev_lay_home >= 0.10:
-                                    st.success(f"✅ Value Bet LAY (EV: {ev_lay_home*100:.2f}%)")
-                                else:
-                                    st.info("ℹ️ Nessuna Value Bet trovata.")
-
-                            # Analisi Draw
-                            st.markdown("**Pareggio**")
-                            col_draw_1, col_draw_2 = st.columns(2)
-                            with col_draw_1:
-                                st.write(f"Quota Reale: {real_odds_draw:.2f}")
-                            with col_draw_2:
-                                if ev_back_draw >= 0.10:
-                                    st.success(f"✅ Value Bet BACK (EV: {ev_back_draw*100:.2f}%)")
-                                elif ev_lay_draw >= 0.10:
-                                    st.success(f"✅ Value Bet LAY (EV: {ev_lay_draw*100:.2f}%)")
-                                else:
-                                    st.info("ℹ️ Nessuna Value Bet trovata.")
-
-                            # Analisi Away
-                            st.markdown("**Away Win**")
-                            col_away_1, col_away_2 = st.columns(2)
-                            with col_away_1:
-                                st.write(f"Quota Reale: {real_odds_away:.2f}")
-                            with col_away_2:
-                                if ev_back_away >= 0.10:
-                                    st.success(f"✅ Value Bet BACK (EV: {ev_back_away*100:.2f}%)")
-                                elif ev_lay_away >= 0.10:
-                                    st.success(f"✅ Value Bet LAY (EV: {ev_lay_away*100:.2f}%)")
-                                else:
-                                    st.info("ℹ️ Nessuna Value Bet trovata.")
-
-                        else:
-                            st.error("Impossibile calcolare la previsione. Controlla i valori inseriti.")
-
-    
+        except Exception as e:
+            st.error(f"❌ Si è verificato un errore durante l'elaborazione del file: {e}")
+            st.help("Verifica che il file sia un CSV valido e che non sia corrotto.")
