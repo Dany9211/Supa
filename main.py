@@ -4,6 +4,7 @@ import numpy as np
 import re
 from datetime import datetime
 
+# Aggiungi qui le funzioni dal file precedente per i pattern
 def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first, max_first):
     gol_home = [int(x) for x in re.findall(r'\d+', str(row.get("home_team_goal_timings", "")))]
     gol_away = [int(x) for x in re.findall(r'\d+', str(row.get("away_team_goal_timings", "")))]
@@ -299,15 +300,14 @@ def calcola_to_score(df_to_analyze, period):
 
     total_matches = len(df_to_score)
     
+    if total_matches == 0:
+        return pd.DataFrame(columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
+
     data = [
         [f"Home Team to Score ({period.upper()})", home_to_score_count, round((home_to_score_count / total_matches) * 100, 2) if total_matches > 0 else 0],
         [f"Away Team to Score ({period.upper()})", away_to_score_count, round((away_to_score_count / total_matches) * 100, 2) if total_matches > 0 else 0]
     ]
     
-    # CORREZIONE APPLICATA
-    if not data:
-        return pd.DataFrame(columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
-
     df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
     df_stats["Odd Minima"] = df_stats["Percentuale %"].apply(odd_min_from_percent)
     
