@@ -4,7 +4,6 @@ import numpy as np
 import re
 from datetime import datetime
 
-# Aggiungi qui le funzioni dal file precedente per i pattern
 def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first, max_first):
     gol_home = [int(x) for x in re.findall(r'\d+', str(row.get("home_team_goal_timings", "")))]
     gol_away = [int(x) for x in re.findall(r'\d+', str(row.get("away_team_goal_timings", "")))]
@@ -65,7 +64,7 @@ def check_second_goal_enhanced(row, second_home_score, second_away_score, min_se
 def odd_min_from_percent(p: float):
     if p and p > 0:
         return round(100.0 / p, 2)
-    return None
+    return np.nan
 
 def style_table(df: pd.DataFrame, percent_cols):
     if isinstance(percent_cols, str):
@@ -103,7 +102,7 @@ def calcola_winrate(df, col_risultato_home, col_risultato_away):
     stats = []
     for esito, count in risultati.items():
         perc = round((count / totale) * 100, 2) if totale > 0 else 0
-        odd_min = round(100 / perc, 2) if perc > 0 else None
+        odd_min = round(100 / perc, 2) if perc > 0 else np.nan
         stats.append((esito, count, perc, odd_min))
     return pd.DataFrame(stats, columns=["Esito", "Conteggio", "WinRate %", "Odd Minima"])
 
@@ -167,7 +166,7 @@ def calcola_double_chance(df_to_analyze, period):
     
     count_1x = ((df_double_chance["gol_home"] >= df_double_chance["gol_away"])).sum()
     count_x2 = ((df_double_chance["gol_away"] >= df_double_chance["gol_home"])).sum()
-    count_12 = ((df_double_chance["gol_home"] != df_double_chance["gol_away"])).sum()
+    count_12 = int((df_double_chance["gol_home"] != df_double_chance["gol_away"])).sum()
     
     data = [
         ["1X", count_1x, round((count_1x / total_matches) * 100, 2) if total_matches > 0 else 0],
@@ -176,7 +175,7 @@ def calcola_double_chance(df_to_analyze, period):
     ]
     
     df_stats = pd.DataFrame(data, columns=["Mercato", "Conteggio", "Percentuale %"])
-    df_stats["Odd Minima"] = df_stats["Percentuale %"].apply(lambda x: odd_min_from_percent(x) if x > 0 else None)
+    df_stats["Odd Minima"] = df_stats["Percentuale %"].apply(lambda x: odd_min_from_percent(x) if x > 0 else np.nan)
     
     return df_stats
 
@@ -217,14 +216,16 @@ def calcola_first_to_score(df_to_analyze, period='ft'):
         gol_away_str = str(row.get("away_team_goal_timings", ""))
 
         if period == 'ft':
-            gol_home = [int(re.sub(r"[^0-9]", "", x)) for x in gol_home_str.split(",") if re.sub(r"[^0-9]", "", x).isdigit()]
-            gol_away = [int(re.sub(r"[^0-9]", "", x)) for x in gol_away_str.split(",") if re.sub(r"[^0-9]", "", x).isdigit()]
+            gol_home = [int(x) for x in re.findall(r'\d+', gol_home_str)]
+            gol_away = [int(x) for x in re.findall(r'\d+', gol_away_str)]
         elif period == 'ht':
-            gol_home = [int(re.sub(r"[^0-9]", "", x)) for x in gol_home_str.split(",") if re.sub(r"[^0-9]", "", x).isdigit() and int(re.sub(r"[^0-9]", "", x)) <= 45]
-            gol_away = [int(re.sub(r"[^0-9]", "", x)) for x in gol_away_str.split(",") if re.sub(r"[^0-9]", "", x).isdigit() and int(re.sub(r"[^0-9]", "", x)) <= 45]
+            gol_home = [int(x) for x in re.findall(r'\d+', gol_home_str) if int(x) <= 45]
+            gol_away = [int(x) for x in re.findall(r'\d+', gol_away_str) if int(x) <= 45]
         elif period == 'sh':
-            gol_home = [int(re.sub(r"[^0-9]", "", x)) for x in gol_home_str.split(",") if re.sub(r"[^0-9]", "", x).isdigit() and int(re.sub(r"[^0-9]", "", x)) > 45]
-            gol_away = [int(re.sub(r"[^0-9]", "", x)) for x in gol_away_str.split(",") if re.sub(r"[^0-9]", "", x).isdigit() and int(re.sub(r"[^0-9]", "", x)) > 45]
+            gol_home = [int(x) for x in re.findall(r'\d+', gol_home_str) if int(x) > 45]
+            gol_away = [int(x) for x in re.findall(r'\d+', gol_away_str) if int(x) > 45]
+        else:
+            continue
 
         min_home_goal = min(gol_home) if gol_home else float('inf')
         min_away_goal = min(gol_away) if gol_away else float('inf')
@@ -434,15 +435,6 @@ def mostra_risultati_esatti(df, col_home, col_away, titolo):
     distribuzione["Odd Minima"] = distribuzione["Percentuale %"].apply(odd_min_from_percent)
 
     st.subheader(f"Risultati Esatti {titolo} ({len(df_valid)} partite)")
-    # Correzione: `st.dataframe` richiede un DataFrame, non uno Styler.
-    # L'errore originale era causato da pandas che chiamava una funzione di matplotlib
-    # da un metodo di styling del dataframe. La soluzione più sicura è
-    # di non usare lo styling background_gradient sulle colonne che non sono numeriche.
-    # Tuttavia, la causa principale è l'ambiente di esecuzione mancante.
-    # Mantengo il tuo codice per la visualizzazione. La soluzione è installare matplotlib.
-    # Ma il problema di TypeError era che `odd_min_from_percent` restituiva None,
-    # che non poteva essere convertito in float per lo styling.
-    # Quindi, il fix sta nell'adattare `style_table` per gestire i `None` in modo appropriato.
     st.dataframe(style_table(distribuzione, ['Percentuale %']))
 
 # Funzione load_data e il resto della UI rimangono invariati
