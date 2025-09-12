@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -29,8 +28,8 @@ def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first
     away_ht = row.get("away_team_goal_count_half_time", 0)
     
     if first_scorer_minute <= 45:
-        if (home_ht < home_goals_at_first) or (away_ht < away_goals_at_first):
-            return False
+      if (home_ht < home_goals_at_first) or (away_ht < away_goals_at_first):
+        return False
     
     return True
 
@@ -68,8 +67,8 @@ def odd_min_from_percent(p: float):
     return np.nan
 
 def style_table(df: pd.DataFrame, percent_cols):
-    if df is None or len(df) == 0:
-        return pd.DataFrame().style
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"]).style
     if isinstance(percent_cols, str):
         percent_cols = [percent_cols]
     fmt = {col: "{:.2f}%" for col in percent_cols}
@@ -315,7 +314,7 @@ def calcola_to_score(df_to_analyze, period):
         [f"Away Team to Score ({period.upper()})", away_to_score_count, round((away_to_score_count / total_matches) * 100, 2) if total_matches > 0 else 0]
     ]
     
-    df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %"])
+    df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
     df_stats["Odd Minima"] = df_stats["Percentuale %"].apply(odd_min_from_percent)
     
     return df_stats
@@ -816,12 +815,33 @@ if st.button("Avvia Analisi Pattern Gol"):
             df_fts_ft = calcola_first_to_score(df_pattern_filtered_min, 'ft')
             st.dataframe(style_table(df_fts_ft, ['Percentuale %']))
 
-        # --- Next Goal e Timeband (già basate su df_pattern_filtered_min + minuto selezionato) ---
+        # --- SEZIONE SH (espandibile) ---
+        with st.expander("📊 Statistiche SH (clicca per espandere)", expanded=False):
+            st.write("### WinRate SH")
+            df_winrate_sh = calcola_winrate(df_pattern_filtered_min, "home_team_goal_count", "away_team_goal_count")
+            st.dataframe(style_table(df_winrate_sh, ['WinRate %']))
+            st.write("### Over/Under SH")
+            df_over_sh, df_under_sh = calcola_over_under(df_pattern_filtered_min, 'sh')
+            st.dataframe(style_table(df_over_sh, ['Percentuale %']))
+            st.dataframe(style_table(df_under_sh, ['Percentuale %']))
+            st.write("### Doppia Chance SH")
+            df_dc_sh = calcola_double_chance(df_pattern_filtered_min, 'sh')
+            st.dataframe(style_table(df_dc_sh, ['Percentuale %']))
+            st.write("### BTTS SH")
+            df_btts_sh = calcola_btts(df_pattern_filtered_min, 'sh')
+            st.dataframe(style_table(df_btts_sh, ['Percentuale %']))
+            st.write("### To Score SH")
+            df_ts_sh = calcola_to_score(df_pattern_filtered_min, 'sh')
+            st.dataframe(style_table(df_ts_sh, ['Percentuale %']))
+            st.write("### First to Score SH")
+            df_fts_sh = calcola_first_to_score(df_pattern_filtered_min, 'sh')
+            st.dataframe(style_table(df_fts_sh, ['Percentuale %']))
+
+        # --- Next Goal e Timeband ---
         st.markdown("---")
         st.subheader("Statistiche Dinamiche (da minuto iniziale)")
         st.write("### Next Goal")
         df_ng = calcola_next_goal(df_pattern_filtered_min, start_min_patt, 90)
         st.dataframe(style_table(df_ng, ['Percentuale %']))
         st.write("### Distribuzione Gol per Timeframe")
-        # Ricalcolata tenendo conto del minutaggio e dei filtri correnti (usa df_pattern_filtered_min e min_start_display)
         mostra_distribuzione_timeband(df_pattern_filtered_min, min_start_display=start_min_patt)
