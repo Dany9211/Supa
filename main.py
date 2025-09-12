@@ -4,6 +4,7 @@ import numpy as np
 import re
 from datetime import datetime
 
+# Aggiungi qui le funzioni dal file precedente per i pattern
 def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first, max_first):
     gol_home = [int(x) for x in re.findall(r'\d+', str(row.get("home_team_goal_timings", "")))]
     gol_away = [int(x) for x in re.findall(r'\d+', str(row.get("away_team_goal_timings", "")))]
@@ -166,7 +167,8 @@ def calcola_double_chance(df_to_analyze, period):
     
     count_1x = ((df_double_chance["gol_home"] >= df_double_chance["gol_away"])).sum()
     count_x2 = ((df_double_chance["gol_away"] >= df_double_chance["gol_home"])).sum()
-    count_12 = int((df_double_chance["gol_home"] != df_double_chance["gol_away"])).sum()
+    # CORREZIONE APPLICATA
+    count_12 = (df_double_chance["gol_home"] != df_double_chance["gol_away"]).sum()
     
     data = [
         ["1X", count_1x, round((count_1x / total_matches) * 100, 2) if total_matches > 0 else 0],
