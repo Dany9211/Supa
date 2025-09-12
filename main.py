@@ -304,6 +304,10 @@ def calcola_to_score(df_to_analyze, period):
         [f"Away Team to Score ({period.upper()})", away_to_score_count, round((away_to_score_count / total_matches) * 100, 2) if total_matches > 0 else 0]
     ]
     
+    # CORREZIONE APPLICATA
+    if not data:
+        return pd.DataFrame(columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
+
     df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
     df_stats["Odd Minima"] = df_stats["Percentuale %"].apply(odd_min_from_percent)
     
