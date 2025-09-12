@@ -4,7 +4,6 @@ import numpy as np
 import re
 from datetime import datetime
 
-# Aggiungi qui le funzioni dal file precedente per i pattern
 def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first, max_first):
     gol_home = [int(x) for x in re.findall(r'\d+', str(row.get("home_team_goal_timings", "")))]
     gol_away = [int(x) for x in re.findall(r'\d+', str(row.get("away_team_goal_timings", "")))]
@@ -167,7 +166,6 @@ def calcola_double_chance(df_to_analyze, period):
     
     count_1x = ((df_double_chance["gol_home"] >= df_double_chance["gol_away"])).sum()
     count_x2 = ((df_double_chance["gol_away"] >= df_double_chance["gol_home"])).sum()
-    # CORREZIONE APPLICATA
     count_12 = (df_double_chance["gol_home"] != df_double_chance["gol_away"]).sum()
     
     data = [
@@ -280,6 +278,7 @@ def calcola_btts(df_to_analyze, period):
 
 def calcola_to_score(df_to_analyze, period):
     if df_to_analyze.empty:
+        # CORREZIONE APPLICATA - Restituisci un DataFrame vuoto con le colonne corrette
         return pd.DataFrame(columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
 
     df_to_score = df_to_analyze.copy()
