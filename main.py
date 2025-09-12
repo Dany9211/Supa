@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -28,8 +29,8 @@ def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first
     away_ht = row.get("away_team_goal_count_half_time", 0)
     
     if first_scorer_minute <= 45:
-      if (home_ht < home_goals_at_first) or (away_ht < away_goals_at_first):
-        return False
+        if (home_ht < home_goals_at_first) or (away_ht < away_goals_at_first):
+            return False
     
     return True
 
@@ -67,6 +68,8 @@ def odd_min_from_percent(p: float):
     return np.nan
 
 def style_table(df: pd.DataFrame, percent_cols):
+    if df is None or len(df) == 0:
+        return pd.DataFrame().style
     if isinstance(percent_cols, str):
         percent_cols = [percent_cols]
     fmt = {col: "{:.2f}%" for col in percent_cols}
@@ -77,8 +80,8 @@ def style_table(df: pd.DataFrame, percent_cols):
         "Partite con Gol": "{:,.0f}",
     })
     styler = (df.style
-                .format(fmt)
-                .background_gradient(subset=percent_cols, cmap="RdYlGn")
+                .format(fmt, na_rep="-")
+                .background_gradient(subset=[c for c in percent_cols if c in df.columns], cmap="RdYlGn")
                 .set_properties(**{"text-align": "center"})
                 .set_table_styles([{ 'selector': 'th', 'props': 'text-align: center;' }])
             )
@@ -114,13 +117,15 @@ def calcola_winrate(df, col_risultato_home, col_risultato_away):
 
 def calcola_over_under(df_to_analyze, period):
     if df_to_analyze.empty:
-        return pd.DataFrame(columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]), pd.DataFrame(columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
+        return (pd.DataFrame(columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]),
+                pd.DataFrame(columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]))
 
     if period == 'ft':
         goals_col = "total_goals_at_full_time"
     elif period == 'ht':
         goals_col = "total_goals_at_half_time"
     elif period == 'sh':
+        df_to_analyze = df_to_analyze.copy()
         df_to_analyze['total_goals_at_second_half'] = df_to_analyze['total_goals_at_full_time'] - df_to_analyze['total_goals_at_half_time']
         goals_col = "total_goals_at_second_half"
     else:
@@ -310,7 +315,8 @@ def calcola_to_score(df_to_analyze, period):
         [f"Away Team to Score ({period.upper()})", away_to_score_count, round((away_to_score_count / total_matches) * 100, 2) if total_matches > 0 else 0]
     ]
     
-    df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
+    # FIX: create with 3 columns, then add "Odd Minima"
+    df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %"])
     df_stats["Odd Minima"] = df_stats["Percentuale %"].apply(odd_min_from_percent)
     
     return df_stats
@@ -359,7 +365,7 @@ def mostra_distribuzione_timeband(df_to_analyze, min_start_display=0):
     risultati = []
     total_matches = len(df_to_analyze)
     
-    for i, ((start_interval, end_interval), label) in enumerate(zip(all_intervalli, all_label_intervalli)):
+    for ((start_interval, end_interval), label) in zip(all_intervalli, all_label_intervalli):
         if end_interval < min_start_display:
             continue
 
