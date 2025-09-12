@@ -85,6 +85,9 @@ def style_table(df: pd.DataFrame, percent_cols):
     return styler
 
 def calcola_winrate(df, col_risultato_home, col_risultato_away):
+    if df.empty:
+        return pd.DataFrame(columns=["Esito", "Conteggio", "WinRate %", "Odd Minima"])
+        
     df_valid = df[(df[col_risultato_home].notna()) & (df[col_risultato_away].notna())].copy()
     if df_valid.empty:
         return pd.DataFrame(columns=["Esito", "Conteggio", "WinRate %", "Odd Minima"])
