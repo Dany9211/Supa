@@ -4,7 +4,6 @@ import numpy as np
 import re
 from datetime import datetime
 
-# Aggiungi qui le funzioni dal file precedente per i pattern
 def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first, max_first):
     gol_home = [int(x) for x in re.findall(r'\d+', str(row.get("home_team_goal_timings", "")))]
     gol_away = [int(x) for x in re.findall(r'\d+', str(row.get("away_team_goal_timings", "")))]
