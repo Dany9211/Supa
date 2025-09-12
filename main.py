@@ -86,6 +86,9 @@ def style_table(df: pd.DataFrame, percent_cols):
 
 def calcola_winrate(df, col_risultato_home, col_risultato_away):
     df_valid = df[(df[col_risultato_home].notna()) & (df[col_risultato_away].notna())].copy()
+    if df_valid.empty:
+        return pd.DataFrame(columns=["Esito", "Conteggio", "WinRate %", "Odd Minima"])
+        
     risultati = {"1 (Casa)": 0, "X (Pareggio)": 0, "2 (Trasferta)": 0}
     for _, row in df_valid.iterrows():
         try:
@@ -108,7 +111,7 @@ def calcola_winrate(df, col_risultato_home, col_risultato_away):
 
 def calcola_over_under(df_to_analyze, period):
     if df_to_analyze.empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"]), pd.DataFrame(columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
 
     if period == 'ft':
         goals_col = "total_goals_at_full_time"
@@ -278,7 +281,6 @@ def calcola_btts(df_to_analyze, period):
 
 def calcola_to_score(df_to_analyze, period):
     if df_to_analyze.empty:
-        # CORREZIONE APPLICATA - Restituisci un DataFrame vuoto con le colonne corrette
         return pd.DataFrame(columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
 
     df_to_score = df_to_analyze.copy()
