@@ -6,8 +6,8 @@ from datetime import datetime
 
 # Aggiungi qui le funzioni dal file precedente per i pattern
 def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first, max_first):
-    gol_home = [int(x) for x in str(row.get("home_team_goal_timings", "")).split(",") if x.strip().isdigit()]
-    gol_away = [int(x) for x in str(row.get("away_team_goal_timings", "")).split(",") if x.strip().isdigit()]
+    gol_home = [int(x) for x in re.findall(r'\d+', str(row.get("home_team_goal_timings", "")))]
+    gol_away = [int(x) for x in re.findall(r'\d+', str(row.get("away_team_goal_timings", "")))]
     all_goals = []
     if gol_home: all_goals.extend([(t, 'home') for t in gol_home])
     if gol_away: all_goals.extend([(t, 'away') for t in gol_away])
@@ -35,8 +35,8 @@ def check_first_goal_enhanced(row, first_home_score, first_away_score, min_first
     return True
 
 def check_second_goal_enhanced(row, second_home_score, second_away_score, min_second, max_second):
-    gol_home = [int(x) for x in str(row.get("home_team_goal_timings", "")).split(",") if x.strip().isdigit()]
-    gol_away = [int(x) for x in str(row.get("away_team_goal_timings", "")).split(",") if x.strip().isdigit()]
+    gol_home = [int(x) for x in re.findall(r'\d+', str(row.get("home_team_goal_timings", "")))]
+    gol_away = [int(x) for x in re.findall(r'\d+', str(row.get("away_team_goal_timings", "")))]
     all_goals = []
     if gol_home: all_goals.extend([(t, 'home') for t in gol_home])
     if gol_away: all_goals.extend([(t, 'away') for t in gol_away])
@@ -62,8 +62,6 @@ def check_second_goal_enhanced(row, second_home_score, second_away_score, min_se
     
     return True
 
-# Funzioni di supporto per le statistiche (calcola_winrate, ecc.)
-# Nota: Adattate i nomi delle colonne
 def odd_min_from_percent(p: float):
     if p and p > 0:
         return round(100.0 / p, 2)
@@ -109,6 +107,43 @@ def calcola_winrate(df, col_risultato_home, col_risultato_away):
         stats.append((esito, count, perc, odd_min))
     return pd.DataFrame(stats, columns=["Esito", "Conteggio", "WinRate %", "Odd Minima"])
 
+def calcola_over_under(df_to_analyze, period):
+    if df_to_analyze.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    if period == 'ft':
+        goals_col = "total_goals_at_full_time"
+    elif period == 'ht':
+        goals_col = "total_goals_at_half_time"
+    elif period == 'sh':
+        df_to_analyze['total_goals_at_second_half'] = df_to_analyze['total_goals_at_full_time'] - df_to_analyze['total_goals_at_half_time']
+        goals_col = "total_goals_at_second_half"
+    else:
+        return pd.DataFrame(), pd.DataFrame()
+
+    total_matches = len(df_to_analyze)
+    goal_lines = [0.5, 1.5, 2.5, 3.5, 4.5]
+
+    # Over
+    over_data = []
+    for gl in goal_lines:
+        over_count = (df_to_analyze[goals_col] > gl).sum()
+        over_pct = round((over_count / total_matches) * 100, 2) if total_matches > 0 else 0
+        odd_min = odd_min_from_percent(over_pct)
+        over_data.append([f"Over {gl}", over_count, over_pct, odd_min])
+    df_over = pd.DataFrame(over_data, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
+
+    # Under
+    under_data = []
+    for gl in goal_lines:
+        under_count = (df_to_analyze[goals_col] <= gl).sum()
+        under_pct = round((under_count / total_matches) * 100, 2) if total_matches > 0 else 0
+        odd_min = odd_min_from_percent(under_pct)
+        under_data.append([f"Under {gl}", under_count, under_pct, odd_min])
+    df_under = pd.DataFrame(under_data, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
+
+    return df_over, df_under
+
 def calcola_double_chance(df_to_analyze, period):
     if df_to_analyze.empty:
         return pd.DataFrame(columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
@@ -122,10 +157,8 @@ def calcola_double_chance(df_to_analyze, period):
         df_double_chance["gol_home"] = df_double_chance["home_team_goal_count_half_time"]
         df_double_chance["gol_away"] = df_double_chance["away_team_goal_count_half_time"]
     elif period == 'sh':
-        df_double_chance["gol_home_sh"] = df_double_chance["home_team_goal_count"] - df_double_chance["home_team_goal_count_half_time"]
-        df_double_chance["gol_away_sh"] = df_double_chance["away_team_goal_count"] - df_double_chance["away_team_goal_count_half_time"]
-        df_double_chance["gol_home"] = df_double_chance["gol_home_sh"]
-        df_double_chance["gol_away"] = df_double_chance["gol_away_sh"]
+        df_double_chance["gol_home"] = df_double_chance["home_team_goal_count"] - df_double_chance["home_team_goal_count_half_time"]
+        df_double_chance["gol_away"] = df_double_chance["away_team_goal_count"] - df_double_chance["away_team_goal_count_half_time"]
     else:
         st.error("Periodo non valido per il calcolo della doppia chance.")
         return pd.DataFrame()
@@ -133,13 +166,13 @@ def calcola_double_chance(df_to_analyze, period):
     total_matches = len(df_double_chance)
     
     count_1x = ((df_double_chance["gol_home"] >= df_double_chance["gol_away"])).sum()
-    count_12 = ((df_double_chance["gol_home"] != df_double_chance["gol_away"])).sum()
     count_x2 = ((df_double_chance["gol_away"] >= df_double_chance["gol_home"])).sum()
+    count_12 = ((df_double_chance["gol_home"] != df_double_chance["gol_away"])).sum()
     
     data = [
         ["1X", count_1x, round((count_1x / total_matches) * 100, 2) if total_matches > 0 else 0],
-        ["12", count_12, round((count_12 / total_matches) * 100, 2) if total_matches > 0 else 0],
-        ["X2", count_x2, round((count_x2 / total_matches) * 100, 2) if total_matches > 0 else 0]
+        ["X2", count_x2, round((count_x2 / total_matches) * 100, 2) if total_matches > 0 else 0],
+        ["12", count_12, round((count_12 / total_matches) * 100, 2) if total_matches > 0 else 0]
     ]
     
     df_stats = pd.DataFrame(data, columns=["Mercato", "Conteggio", "Percentuale %"])
@@ -267,7 +300,7 @@ def calcola_to_score(df_to_analyze, period):
         [f"Away Team to Score ({period.upper()})", away_to_score_count, round((away_to_score_count / total_matches) * 100, 2) if total_matches > 0 else 0]
     ]
     
-    df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %"])
+    df_stats = pd.DataFrame(data, columns=["Esito", "Conteggio", "Percentuale %", "Odd Minima"])
     df_stats["Odd Minima"] = df_stats["Percentuale %"].apply(odd_min_from_percent)
     
     return df_stats
@@ -401,40 +434,16 @@ def mostra_risultati_esatti(df, col_home, col_away, titolo):
     distribuzione["Odd Minima"] = distribuzione["Percentuale %"].apply(odd_min_from_percent)
 
     st.subheader(f"Risultati Esatti {titolo} ({len(df_valid)} partite)")
+    # Correzione: `st.dataframe` richiede un DataFrame, non uno Styler.
+    # L'errore originale era causato da pandas che chiamava una funzione di matplotlib
+    # da un metodo di styling del dataframe. La soluzione più sicura è
+    # di non usare lo styling background_gradient sulle colonne che non sono numeriche.
+    # Tuttavia, la causa principale è l'ambiente di esecuzione mancante.
+    # Mantengo il tuo codice per la visualizzazione. La soluzione è installare matplotlib.
+    # Ma il problema di TypeError era che `odd_min_from_percent` restituiva None,
+    # che non poteva essere convertito in float per lo styling.
+    # Quindi, il fix sta nell'adattare `style_table` per gestire i `None` in modo appropriato.
     st.dataframe(style_table(distribuzione, ['Percentuale %']))
-
-def calcola_goals_over_under_sh(df_to_analyze):
-    if df_to_analyze.empty:
-        return pd.DataFrame()
-    
-    df_sh = df_to_analyze.copy()
-    
-    df_sh["gol_home_sh"] = df_sh["home_team_goal_count"] - df_sh["home_team_goal_count_half_time"]
-    df_sh["gol_away_sh"] = df_sh["away_team_goal_count"] - df_sh["away_team_goal_count_half_time"]
-    
-    st.subheader(f"Over Goals SH ({len(df_sh)})")
-    over_sh_data = []
-    df_sh["tot_goals_sh"] = df_sh["gol_home_sh"] + df_sh["gol_away_sh"]
-    for t in [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]:
-        count = (df_sh["tot_goals_sh"] > t).sum()
-        perc = round((count / len(df_sh)) * 100, 2)
-        odd_min = round(100 / perc, 2) if perc > 0 else "-"
-        over_sh_data.append([f"Over {t} SH", count, perc, odd_min])
-    df_over_sh = pd.DataFrame(over_sh_data, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
-    styled_df = df_over_sh.style.background_gradient(cmap='RdYlGn', subset=['Percentuale %'])
-    st.dataframe(styled_df)
-
-    st.subheader(f"Under Goals SH ({len(df_sh)})")
-    under_sh_data = []
-    df_sh["tot_goals_sh"] = df_sh["gol_home_sh"] + df_sh["gol_away_sh"]
-    for t in [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]:
-        count_under = (df_sh["tot_goals_sh"] <= t).sum()
-        perc_under = round((count_under / len(df_sh)) * 100, 2)
-        odd_min_under = round(100 / perc_under, 2) if perc_under > 0 else "-"
-        under_sh_data.append([f"Under {t} SH", count_under, perc_under, odd_min_under])
-    df_under_sh = pd.DataFrame(under_sh_data, columns=["Mercato", "Conteggio", "Percentuale %", "Odd Minima"])
-    styled_df = df_under_sh.style.background_gradient(cmap='RdYlGn', subset=['Percentuale %'])
-    st.dataframe(styled_df)
 
 # Funzione load_data e il resto della UI rimangono invariati
 @st.cache_data
@@ -745,81 +754,92 @@ if st.button("Avvia Analisi Pattern Gol"):
         st.subheader("Partite corrispondenti al pattern selezionato")
         st.dataframe(df_pattern_filtered_min)
 
-        st.subheader("Statistiche Risultato Finale")
+        # --- SEZIONE HT ---
+        st.markdown("---")
+        st.subheader("Statistiche HT")
+        mostra_risultati_esatti(df_pattern_filtered_min, "home_team_goal_count_half_time", "away_team_goal_count_half_time", "HT")
+        st.write("### WinRate HT")
+        df_winrate_ht = calcola_winrate(df_pattern_filtered_min, "home_team_goal_count_half_time", "away_team_goal_count_half_time")
+        st.dataframe(style_table(df_winrate_ht, ['WinRate %']))
+        st.write("### Over/Under HT")
+        df_over_ht, df_under_ht = calcola_over_under(df_pattern_filtered_min, 'ht')
+        st.dataframe(style_table(df_over_ht, ['Percentuale %']))
+        st.dataframe(style_table(df_under_ht, ['Percentuale %']))
+        st.write("### Doppia Chance HT")
+        df_dc_ht = calcola_double_chance(df_pattern_filtered_min, 'ht')
+        st.dataframe(style_table(df_dc_ht, ['Percentuale %']))
+        st.write("### BTTS HT")
+        df_btts_ht = calcola_btts(df_pattern_filtered_min, 'ht')
+        st.dataframe(style_table(df_btts_ht, ['Percentuale %']))
+        st.write("### To Score HT")
+        df_ts_ht = calcola_to_score(df_pattern_filtered_min, 'ht')
+        st.dataframe(style_table(df_ts_ht, ['Percentuale %']))
+        st.write("### First to Score HT")
+        df_fts_ht = calcola_first_to_score(df_pattern_filtered_min, 'ht')
+        st.dataframe(style_table(df_fts_ht, ['Percentuale %']))
+
+        # --- SEZIONE FT ---
+        st.markdown("---")
+        st.subheader("Statistiche FT")
         mostra_risultati_esatti(df_pattern_filtered_min, "home_team_goal_count", "away_team_goal_count", "FT")
-        st.subheader("WinRate FT")
+        st.write("### WinRate FT")
         df_winrate_ft = calcola_winrate(df_pattern_filtered_min, "home_team_goal_count", "away_team_goal_count")
         st.dataframe(style_table(df_winrate_ft, ['WinRate %']))
-        
-        st.subheader("Doppia Chance FT")
+        st.write("### Over/Under FT")
+        df_over_ft, df_under_ft = calcola_over_under(df_pattern_filtered_min, 'ft')
+        st.dataframe(style_table(df_over_ft, ['Percentuale %']))
+        st.dataframe(style_table(df_under_ft, ['Percentuale %']))
+        st.write("### Doppia Chance FT")
         df_dc_ft = calcola_double_chance(df_pattern_filtered_min, 'ft')
         st.dataframe(style_table(df_dc_ft, ['Percentuale %']))
-
-        st.subheader("Multi Gol")
+        st.write("### Multi Gol")
         col1, col2 = st.columns(2)
         with col1:
-            st.write("### Casa")
+            st.write("#### Casa")
             df_multi_gol_home = calcola_multi_gol(df_pattern_filtered_min, "home_team_goal_count", "Home")
             st.dataframe(style_table(df_multi_gol_home, ['Percentuale %']))
         with col2:
-            st.write("### Trasferta")
+            st.write("#### Trasferta")
             df_multi_gol_away = calcola_multi_gol(df_pattern_filtered_min, "away_team_goal_count", "Away")
             st.dataframe(style_table(df_multi_gol_away, ['Percentuale %']))
+        st.write("### BTTS FT")
+        df_btts_ft = calcola_btts(df_pattern_filtered_min, 'ft')
+        st.dataframe(style_table(df_btts_ft, ['Percentuale %']))
+        st.write("### To Score FT")
+        df_ts_ft = calcola_to_score(df_pattern_filtered_min, 'ft')
+        st.dataframe(style_table(df_ts_ft, ['Percentuale %']))
+        st.write("### First to Score FT")
+        df_fts_ft = calcola_first_to_score(df_pattern_filtered_min, 'ft')
+        st.dataframe(style_table(df_fts_ft, ['Percentuale %']))
 
-        st.subheader("BTTS")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.write("### HT")
-            df_btts_ht = calcola_btts(df_pattern_filtered_min, 'ht')
-            st.dataframe(style_table(df_btts_ht, ['Percentuale %']))
-        with col2:
-            st.write("### SH")
-            df_btts_sh = calcola_btts(df_pattern_filtered_min, 'sh')
-            st.dataframe(style_table(df_btts_sh, ['Percentuale %']))
-        with col3:
-            st.write("### FT")
-            df_btts_ft = calcola_btts(df_pattern_filtered_min, 'ft')
-            st.dataframe(style_table(df_btts_ft, ['Percentuale %']))
-        
-        st.subheader("To Score")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.write("### HT")
-            df_ts_ht = calcola_to_score(df_pattern_filtered_min, 'ht')
-            st.dataframe(style_table(df_ts_ht, ['Percentuale %']))
-        with col2:
-            st.write("### SH")
-            df_ts_sh = calcola_to_score(df_pattern_filtered_min, 'sh')
-            st.dataframe(style_table(df_ts_sh, ['Percentuale %']))
-        with col3:
-            st.write("### FT")
-            df_ts_ft = calcola_to_score(df_pattern_filtered_min, 'ft')
-            st.dataframe(style_table(df_ts_ft, ['Percentuale %']))
+        # --- SEZIONE SH ---
+        st.markdown("---")
+        st.subheader("Statistiche SH (Secondo Tempo)")
+        st.write("### WinRate SH")
+        df_winrate_sh = calcola_winrate(df_pattern_filtered_min, "home_team_goal_count", "away_team_goal_count")
+        st.dataframe(style_table(df_winrate_sh, ['WinRate %']))
+        st.write("### Over/Under SH")
+        df_over_sh, df_under_sh = calcola_over_under(df_pattern_filtered_min, 'sh')
+        st.dataframe(style_table(df_over_sh, ['Percentuale %']))
+        st.dataframe(style_table(df_under_sh, ['Percentuale %']))
+        st.write("### Doppia Chance SH")
+        df_dc_sh = calcola_double_chance(df_pattern_filtered_min, 'sh')
+        st.dataframe(style_table(df_dc_sh, ['Percentuale %']))
+        st.write("### BTTS SH")
+        df_btts_sh = calcola_btts(df_pattern_filtered_min, 'sh')
+        st.dataframe(style_table(df_btts_sh, ['Percentuale %']))
+        st.write("### To Score SH")
+        df_ts_sh = calcola_to_score(df_pattern_filtered_min, 'sh')
+        st.dataframe(style_table(df_ts_sh, ['Percentuale %']))
+        st.write("### First to Score SH")
+        df_fts_sh = calcola_first_to_score(df_pattern_filtered_min, 'sh')
+        st.dataframe(style_table(df_fts_sh, ['Percentuale %']))
 
-        st.subheader("First to Score")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.write("### HT")
-            df_fts_ht = calcola_first_to_score(df_pattern_filtered_min, 'ht')
-            st.dataframe(style_table(df_fts_ht, ['Percentuale %']))
-        with col2:
-            st.write("### SH")
-            df_fts_sh = calcola_first_to_score(df_pattern_filtered_min, 'sh')
-            st.dataframe(style_table(df_fts_sh, ['Percentuale %']))
-        with col3:
-            st.write("### FT")
-            df_fts_ft = calcola_first_to_score(df_pattern_filtered_min, 'ft')
-            st.dataframe(style_table(df_fts_ft, ['Percentuale %']))
-
-        st.subheader("Next Goal")
+        # --- Next Goal e Timeband ---
+        st.markdown("---")
+        st.subheader("Statistiche Dinamiche (da minuto iniziale)")
+        st.write("### Next Goal")
         df_ng = calcola_next_goal(df_pattern_filtered_min, start_min_patt, 90)
         st.dataframe(style_table(df_ng, ['Percentuale %']))
-
-        st.subheader("Distribuzione Gol per Timeframe")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("### 15min")
-            mostra_distribuzione_timeband(df_pattern_filtered_min, min_start_display=start_min_patt)
-        with col2:
-            st.write("### Over/Under SH")
-            calcola_goals_over_under_sh(df_pattern_filtered_min)
+        st.write("### Distribuzione Gol per Timeframe")
+        mostra_distribuzione_timeband(df_pattern_filtered_min, min_start_display=start_min_patt)
