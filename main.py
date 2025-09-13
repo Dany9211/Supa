@@ -521,7 +521,7 @@ def load_data(uploaded_file):
 # UI
 # =======================
 st.set_page_config(page_title="Filtri Dati Calcio", layout="wide")
-st.title("⚽ Dashboard Filtri partite squadre Calcio")
+st.title("⚽ Dashboard Pattern Gol Calcio")
 st.write("Carica il tuo file CSV per iniziare l'analisi.")
 uploaded_file = st.file_uploader("Scegli un file CSV", type=["csv"], key="uploader1")
 
