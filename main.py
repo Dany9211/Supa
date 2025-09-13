@@ -430,7 +430,164 @@ def mostra_distribuzione_timeband(df_to_analyze, min_start_display=0):
     df_result = pd.DataFrame(risultati, columns=[
         "Timeframe", "Partite con Gol", "Percentuale %", "Odd Minima", ">= 2 Gol %", "Odd Minima >= 2 Gol"
     ])
-    st.dataframe(style_table(df_result, ['Percentuale %', '>= 2 Gol %']))
+    
+
+# ===================== STATISTICHE SU df_out =====================
+def _pct(n, d):
+    return (100.0 * n / d) if d else 0.0
+
+def _safe_int(x, default=0):
+    try:
+        return int(x)
+    except Exception:
+        return default
+
+# Derivazioni sicure per FT e HT
+tot_rows = len(df_out)
+
+# FT goal counts
+if {'home_team_goal_count','away_team_goal_count'}.issubset(df_out.columns):
+    ft_h = df_out['home_team_goal_count'].astype('Int64').fillna(0).astype(int)
+    ft_a = df_out['away_team_goal_count'].astype('Int64').fillna(0).astype(int)
+else:
+    # Fallback: conta da timings
+    def _parse_list(s):
+        if s is None: return []
+        s = str(s)
+        if s.strip() == '' or s.lower() == 'nan': return []
+        parts = [p.strip() for p in s.split(',') if p.strip()!='']
+        out = []
+        for p in parts:
+            try:
+                out.append(int(p.split('+')[0].split("'")[0]))
+            except Exception:
+                pass
+        return out
+    ft_h = df_out.get('home_team_goal_timings', []).apply(_parse_list).apply(len) if 'home_team_goal_timings' in df_out.columns else 0
+    ft_a = df_out.get('away_team_goal_timings', []).apply(_parse_list).apply(len) if 'away_team_goal_timings' in df_out.columns else 0
+
+# HT goal counts
+if {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_out.columns):
+    ht_h = df_out['home_team_goal_count_half_time'].astype('Int64').fillna(0).astype(int)
+    ht_a = df_out['away_team_goal_count_half_time'].astype('Int64').fillna(0).astype(int)
+else:
+    # Fallback da timings (<=45 inclusivo)
+    def _count_ht(s):
+        if s is None: return 0
+        s = str(s)
+        if s.strip()=='' or s.lower()=='nan': return 0
+        cnt = 0
+        for p in s.split(','):
+            p = p.strip()
+            if not p: continue
+            try:
+                m = int(p.split('+')[0].split("'")[0])
+                if m <= 45: cnt += 1
+            except Exception:
+                pass
+        return cnt
+    ht_h = df_out.get('home_team_goal_timings', []).apply(_count_ht) if 'home_team_goal_timings' in df_out.columns else 0
+    ht_a = df_out.get('away_team_goal_timings', []).apply(_count_ht) if 'away_team_goal_timings' in df_out.columns else 0
+
+# SH = FT - HT
+sh_h = (ft_h - ht_h)
+sh_a = (ft_a - ht_a)
+
+# Totali
+ft_tot = ft_h + ft_a
+ht_tot = ht_h + ht_a
+sh_tot = sh_h + sh_a
+
+# ---------- Over Winrate ----------
+def _over_rate(series, th):
+    n = int((series > th).sum())
+    return n, _pct(n, tot_rows)
+
+over_ft = {}
+for th in [0,1,2,3,4]:  # Over 0.5 .. Over 4.5
+    n, r = _over_rate(ft_tot, th)
+    over_ft[f"Over {th+0.5} FT"] = {"N": n, "Win%": round(r,2)}
+
+over_ht = {}
+for th in [0,1]:  # Over 0.5/1.5 HT
+    n, r = _over_rate(ht_tot, th)
+    over_ht[f"Over {th+0.5} HT"] = {"N": n, "Win%": round(r,2)}
+
+over_sh = {}
+for th in [0,1,2]:  # Over 0.5/1.5/2.5 SH
+    n, r = _over_rate(sh_tot, th)
+    over_sh[f"Over {th+0.5} 2°T"] = {"N": n, "Win%": round(r,2)}
+
+# ---------- Esiti esatti ----------
+from collections import Counter
+exact_ft = Counter(zip(ft_h, ft_a))
+exact_ht = Counter(zip(ht_h, ht_a))
+exact_sh = Counter(zip(sh_h, sh_a))
+
+def _top_scores(counter, topk=10):
+    items = counter.most_common(topk)
+    return [{"Score": f"{h}-{a}", "N": n, "Win%": round(_pct(n, tot_rows),2)} for (h,a), n in items]
+
+# ---------- 1X2 Winrate ----------
+# FT
+def _sign(x): return (0 if x==0 else (1 if x>0 else -1))
+ft_sign = (ft_h - ft_a).apply(_sign)
+n_home = int((ft_sign > 0).sum())
+n_draw = int((ft_sign == 0).sum())
+n_away = int((ft_sign < 0).sum())
+res_1x2_ft = [
+    {"Esito": "1", "N": n_home, "Win%": round(_pct(n_home, tot_rows),2)},
+    {"Esito": "X", "N": n_draw, "Win%": round(_pct(n_draw, tot_rows),2)},
+    {"Esito": "2", "N": n_away, "Win%": round(_pct(n_away, tot_rows),2)},
+]
+
+# HT
+ht_sign = (ht_h - ht_a).apply(_sign)
+hth = int((ht_sign > 0).sum())
+htx = int((ht_sign == 0).sum())
+hta = int((ht_sign < 0).sum())
+res_1x2_ht = [
+    {"Esito": "1", "N": hth, "Win%": round(_pct(hth, tot_rows),2)},
+    {"Esito": "X", "N": htx, "Win%": round(_pct(htx, tot_rows),2)},
+    {"Esito": "2", "N": hta, "Win%": round(_pct(hta, tot_rows),2)},
+]
+
+# SH (solo differenziale 2°T)
+sh_sign = (sh_h - sh_a).apply(_sign)
+shh = int((sh_sign > 0).sum())
+shx = int((sh_sign == 0).sum())
+sha = int((sh_sign < 0).sum())
+res_1x2_sh = [
+    {"Esito": "1", "N": shh, "Win%": round(_pct(shh, tot_rows),2)},
+    {"Esito": "X", "N": shx, "Win%": round(_pct(shx, tot_rows),2)},
+    {"Esito": "2", "N": sha, "Win%": round(_pct(sha, tot_rows),2)},
+]
+
+import pandas as _pd
+st.markdown("### 📊 Statistiche dal sottoinsieme corrente")
+with st.expander("FT — Over winrate & 1X2", expanded=False):
+    st.write(_pd.DataFrame(over_ft).T)
+    st.write(_pd.DataFrame(res_1x2_ft))
+
+    st.markdown("**Top 10 risultati esatti FT**")
+    st.write(_pd.DataFrame(_top_scores(exact_ft, 10)))
+
+with st.expander("HT — Over winrate & 1X2", expanded=False):
+    st.write(_pd.DataFrame(over_ht).T)
+    st.write(_pd.DataFrame(res_1x2_ht))
+
+    st.markdown("**Top 10 risultati esatti HT**")
+    st.write(_pd.DataFrame(_top_scores(exact_ht, 10)))
+
+with st.expander("2° Tempo — Over winrate & 1X2", expanded=False):
+    st.write(_pd.DataFrame(over_sh).T)
+    st.write(_pd.DataFrame(res_1x2_sh))
+
+    st.markdown("**Top 10 risultati esatti 2° Tempo**")
+    st.write(_pd.DataFrame(_top_scores(exact_sh, 10)))
+# =================== FINE STATISTICHE ===================
+
+st.dataframe(style_table(df_result, ['Percentuale %', '>= 2 Gol %']))
 
 def mostra_risultati_esatti(df, col_home, col_away, titolo):
     risultati_interessanti = [
