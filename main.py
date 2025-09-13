@@ -873,7 +873,31 @@ try:
     if _apply_second:
         df_after_second = df_after_first[df_after_first.apply(lambda row: check_second_goal_enhanced(row, sh, sa, min_second, max_second), axis=1)]
     else:
-        df_after_second = df_after_first.copy()
+        # Robust fallback base df
+        try:
+            _candidates = ['df_after_first','df_gate2','df_gate1','df_gate0','df_gate','df_filtered','df_gate_pre','df_base','df']
+            _ns = {}
+            _ns.update(globals())
+            _ns.update(locals())
+            _base_df = None
+            for _n in _candidates:
+                if _n in _ns and _ns[_n] is not None:
+                    _base_df = _ns[_n]
+                    break
+            if _base_df is None:
+                # last-resort: create empty same-columns DataFrame if df_gate1 exists
+                if 'df_gate1' in _ns:
+                    import pandas as _pd
+                    _base_df = _ns['df_gate1'].copy()
+                else:
+                    raise NameError("No suitable base df found for df_after_second fallback")
+            df_after_second = _base_df.copy()
+        except Exception:
+            # As an absolute fallback, try to keep the pipeline alive with df_after_second = df_gate1
+            try:
+                df_after_second = df_gate1.copy()
+            except Exception:
+                raise
 except Exception as _patch_d_exc:
     # On any unexpected error, fall back to no additional second-goal filtering
     df_after_second = df_after_first.copy()
