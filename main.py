@@ -753,6 +753,30 @@ if st.button("Avvia Analisi Pattern Gol"):
 
     df_gate1 = df_pattern[df_pattern.apply(match_score_at_min, axis=1)]
 
+# --- PATCH A: enforce HT == current score when starting from 46' or later ---
+try:
+    if start_min_patt >= 46 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
+        df_gate1 = df_gate1[
+            (df_gate1['home_team_goal_count_half_time'].astype(int) == int(curr_h)) &
+            (df_gate1['away_team_goal_count_half_time'].astype(int) == int(curr_a))
+        ]
+except Exception as _patch_exc:
+    # Non-fatal: keep running even if columns not present
+    pass
+# --- END PATCH A ---
+
+# --- PATCH B: if starting in 1st half, require HT == current score (not just >=) ---
+try:
+    if start_min_patt <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
+        df_gate1 = df_gate1[
+            (df_gate1['home_team_goal_count_half_time'].astype(int) == int(curr_h)) &
+            (df_gate1['away_team_goal_count_half_time'].astype(int) == int(curr_a))
+        ]
+except Exception as _patch_exc:
+    pass
+# --- END PATCH B ---
+
+
     # Coerenza HT richiesta se start_min_patt <= 45
     if start_min_patt <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
         def ht_not_lower(row):
@@ -799,6 +823,32 @@ if st.button("Avvia Analisi Pattern Gol"):
         df_after_first = df_after_first[df_after_first.apply(lambda row: check_first_goal_enhanced(row, fh, fa, min_first, max_first), axis=1)]
 
     df_after_second = df_after_first.copy()
+
+# --- PATCH C: if second goal is filtered and occurs in 1st half, lock HT to that result ---
+try:
+    if ('first_goal_result' in globals() and 'first_goal_time' in globals() and
+        'second_goal_result' in globals() and 'second_goal_time' in globals() and
+        first_goal_result != "Nessun Filtro" and first_goal_time != "Nessun Filtro" and
+        second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro"):
+        # Expect like "0-2"
+        try:
+            sh, sa = [int(x) for x in str(second_goal_result).split('-')]
+            # goal_pattern_time_intervals should exist in code base; fallback to common mapping
+            intervals = goal_pattern_time_intervals if 'goal_pattern_time_intervals' in globals() else {
+                "0-10": (0,10), "11-20": (11,20), "21-30": (21,30), "31-39": (31,39), "40-45": (40,45),
+                "45+": (45,45), "46-60": (46,60), "61-75": (61,75), "76-90": (76,90), "90+": (90,90)
+            }
+            min_second, max_second = intervals.get(str(second_goal_time), (None, None))
+        except Exception:
+            sh = sa = min_second = max_second = None
+        if max_second is not None and max_second <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_after_second.columns):
+            df_after_second = df_after_second[
+                (df_after_second['home_team_goal_count_half_time'].astype(int) == sh) &
+                (df_after_second['away_team_goal_count_half_time'].astype(int) == sa)
+            ]
+except Exception as _patch_exc:
+    pass
+# --- END PATCH C ---
     if (first_goal_result != "Nessun Filtro" and first_goal_time != "Nessun Filtro" and
         second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro"):
         sh, sa = map(int, second_goal_result.split('-'))
