@@ -929,7 +929,8 @@ try:
                 raise
 except Exception as _patch_d_exc:
     # On any unexpected error, fall back to no additional second-goal filtering
-    
+    pass
+
 # --- PATCH E: robust guard for df_after_first before copying into df_after_second ---
 try:
     _ns = {}
