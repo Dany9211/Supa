@@ -822,8 +822,37 @@ except Exception as _patch_exc:
         min_first, max_first = goal_pattern_time_intervals[first_goal_time]
         df_after_first = df_after_first[df_after_first.apply(lambda row: check_first_goal_enhanced(row, fh, fa, min_first, max_first), axis=1)]
 
+    
+# --- PATCH E: robust guard for df_after_first before copying into df_after_second ---
+try:
+    _ns = {}
+    try:
+        _ns.update(globals())
+    except Exception:
+        pass
+    try:
+        _ns.update(locals())
+    except Exception:
+        pass
+    # Ensure df_after_first exists
+    if 'df_after_first' not in _ns or _ns.get('df_after_first') is None:
+        _cands = ['df_gate2','df_gate1','df_gate0','df_gate','df_filtered','df_gate_pre','df_base','df']
+        _base = None
+        for _n in _cands:
+            if _n in _ns and _ns[_n] is not None:
+                _base = _ns[_n]
+                break
+        if _base is None:
+            raise NameError("df_after_first is undefined and no base df available")
+        df_after_first = _base.copy()
     df_after_second = df_after_first.copy()
-
+except Exception as _patch_e_exc:
+    # last resort fallback
+    try:
+        df_after_second = df_gate1.copy()
+    except Exception:
+        raise
+# --- END PATCH E ---
 # --- PATCH C: if second goal is filtered and occurs in 1st half, lock HT to that result ---
 try:
     if ('first_goal_result' in globals() and 'first_goal_time' in globals() and
@@ -900,7 +929,37 @@ try:
                 raise
 except Exception as _patch_d_exc:
     # On any unexpected error, fall back to no additional second-goal filtering
+    
+# --- PATCH E: robust guard for df_after_first before copying into df_after_second ---
+try:
+    _ns = {}
+    try:
+        _ns.update(globals())
+    except Exception:
+        pass
+    try:
+        _ns.update(locals())
+    except Exception:
+        pass
+    # Ensure df_after_first exists
+    if 'df_after_first' not in _ns or _ns.get('df_after_first') is None:
+        _cands = ['df_gate2','df_gate1','df_gate0','df_gate','df_filtered','df_gate_pre','df_base','df']
+        _base = None
+        for _n in _cands:
+            if _n in _ns and _ns[_n] is not None:
+                _base = _ns[_n]
+                break
+        if _base is None:
+            raise NameError("df_after_first is undefined and no base df available")
+        df_after_first = _base.copy()
     df_after_second = df_after_first.copy()
+except Exception as _patch_e_exc:
+    # last resort fallback
+    try:
+        df_after_second = df_gate1.copy()
+    except Exception:
+        raise
+# --- END PATCH E ---
 # --- END PATCH D ---
 
 
