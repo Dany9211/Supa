@@ -723,318 +723,129 @@ else:
     second_min_patt = None
     risultato_attuale_patt2 = None
 
+
 if st.button("Avvia Analisi Pattern Gol"):
-    df_pattern = odds_filtered.copy()
-
-    # Filtri quote di "questa analisi"
     try:
-        odd_home_min_patt = float(odd_home_min_patt) if odd_home_min_patt.strip() else 1.0
-        odd_home_max_patt = float(odd_home_max_patt) if odd_home_max_patt.strip() else 20.0
-        odd_away_min_patt = float(odd_away_min_patt) if odd_away_min_patt.strip() else 1.0
-        odd_away_max_patt = float(odd_away_max_patt) if odd_away_max_patt.strip() else 20.0
-        
-        if 'odds_ft_home_team_win' in df_pattern.columns and 'odds_ft_away_team_win' in df_pattern.columns:
-            df_pattern = df_pattern[(df_pattern['odds_ft_home_team_win'] >= odd_home_min_patt) & (df_pattern['odds_ft_home_team_win'] <= odd_home_max_patt)]
-            df_pattern = df_pattern[(df_pattern['odds_ft_away_team_win'] >= odd_away_min_patt) & (df_pattern['odds_ft_away_team_win'] <= odd_away_max_patt)]
-    except ValueError:
-        st.error("I valori delle quote per l'analisi Pattern non sono validi. Inserisci numeri.")
-        df_pattern = pd.DataFrame()
+        df_pattern = odds_filtered.copy() if 'odds_filtered' in globals() else df.copy() if 'df' in globals() else pd.DataFrame()
 
-    # ========= 1) GATE: vincolo 1 (fa fede) =========
-    try:
-        curr_h, curr_a = map(int, risultato_attuale_patt.split('-'))
-    except ValueError:
-        st.error("Formato risultato (vincolo 1) non valido. Usa 'X-Y' (es. '1-0').")
-        st.stop()
-
-    def match_score_at_min(row):
-        h_at_m, a_at_m = cum_score_at_min(row, start_min_patt)
-        return (h_at_m == curr_h) and (a_at_m == curr_a)
-
-    df_gate1 = df_pattern[df_pattern.apply(match_score_at_min, axis=1)]
-
-# --- PATCH A: enforce HT == current score when starting from 46' or later ---
-try:
-    if start_min_patt >= 46 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
-        df_gate1 = df_gate1[
-            (df_gate1['home_team_goal_count_half_time'].astype(int) == int(curr_h)) &
-            (df_gate1['away_team_goal_count_half_time'].astype(int) == int(curr_a))
-        ]
-except Exception as _patch_exc:
-    # Non-fatal: keep running even if columns not present
-    pass
-# --- END PATCH A ---
-
-# --- PATCH B: if starting in 1st half, require HT == current score (not just >=) ---
-try:
-    if start_min_patt <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
-        df_gate1 = df_gate1[
-            (df_gate1['home_team_goal_count_half_time'].astype(int) == int(curr_h)) &
-            (df_gate1['away_team_goal_count_half_time'].astype(int) == int(curr_a))
-        ]
-except Exception as _patch_exc:
-    pass
-# --- END PATCH B ---
-
-
-    # Coerenza HT richiesta se start_min_patt <= 45
-    if start_min_patt <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
-        def ht_not_lower(row):
-            return (row['home_team_goal_count_half_time'] >= curr_h) and (row['away_team_goal_count_half_time'] >= curr_a)
-        df_gate1 = df_gate1[df_gate1.apply(ht_not_lower, axis=1)]
-
-    # ========= 2) Vincolo 2 (opzionale) =========
-    if use_second_constraint:
+        # Safe defaults for odds filters
         try:
-            curr2_h, curr2_a = map(int, risultato_attuale_patt2.split('-'))
-        except ValueError:
-            st.error("Formato risultato (vincolo 2) non valido. Usa 'X-Y' (es. '1-0').")
+            _ohmin = str(odd_home_min_patt).strip() if 'odd_home_min_patt' in globals() else ""
+            _ohmax = str(odd_home_max_patt).strip() if 'odd_home_max_patt' in globals() else ""
+            _oamin = str(odd_away_min_patt).strip() if 'odd_away_min_patt' in globals() else ""
+            _oamax = str(odd_away_max_patt).strip() if 'odd_away_max_patt' in globals() else ""
+            odd_home_min = float(_ohmin) if _ohmin else 1.0
+            odd_home_max = float(_ohmax) if _ohmax else 20.0
+            odd_away_min = float(_oamin) if _oamin else 1.0
+            odd_away_max = float(_oamax) if _oamax else 20.0
+        except Exception:
+            st.error("I valori delle quote per l'analisi Pattern non sono validi. Inserisci numeri.")
+            df_pattern = pd.DataFrame()
+
+        if not df_pattern.empty and 'odds_ft_home_team_win' in df_pattern.columns:
+            df_pattern = df_pattern[(df_pattern['odds_ft_home_team_win'] >= odd_home_min) & (df_pattern['odds_ft_home_team_win'] <= odd_home_max)]
+        if not df_pattern.empty and 'odds_ft_away_team_win' in df_pattern.columns:
+            df_pattern = df_pattern[(df_pattern['odds_ft_away_team_win'] >= odd_away_min) & (df_pattern['odds_ft_away_team_win'] <= odd_away_max)]
+
+        # Gate 1: risultato attuale (fa fede)
+        try:
+            curr_h, curr_a = map(int, str(risultato_attuale_patt).split('-'))
+        except Exception:
+            st.error("Formato risultato (vincolo 1) non valido. Usa 'X-Y' (es. '1-0').")
             st.stop()
 
-        def match_score_at_min2(row):
-            h2, a2 = cum_score_at_min(row, second_min_patt)
-            return (h2 == curr2_h) and (a2 == curr2_a)
-
-        df_gate2 = df_gate1[df_gate1.apply(match_score_at_min2, axis=1)]
-
-        # Regola speciale: se min1 <=45, min2 >=46, e i due risultati sono uguali,
-        # allora: nessun gol in (min1,45] e HT == risultato vincolo1
-        if (start_min_patt <= 45) and (second_min_patt >= 46) and (curr_h == curr2_h) and (curr_a == curr2_a):
-            if {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate2.columns):
-                def no_goals_until_ht_and_ht_equals(row):
-                    g_h, g_a = goals_between(row, start_min_patt, 45)
-                    ht_ok = (int(row['home_team_goal_count_half_time']) == curr_h) and (int(row['away_team_goal_count_half_time']) == curr_a)
-                    return (g_h == 0 and g_a == 0 and ht_ok)
-                df_gate2 = df_gate2[df_gate2.apply(no_goals_until_ht_and_ht_equals, axis=1)]
-            else:
-                # Se mancano le colonne HT, imponiamo solo "no goals fino a 45'"
-                def no_goals_until_ht(row):
-                    g_h, g_a = goals_between(row, start_min_patt, 45)
-                    return (g_h == 0 and g_a == 0)
-                df_gate2 = df_gate2[df_gate2.apply(no_goals_until_ht, axis=1)]
-    else:
-        df_gate2 = df_gate1
-
-    # ========= 3) Filtri opzionali PRIMO/SECONDO GOL =========
-    df_after_first = df_gate2.copy()
-    if first_goal_result != "Nessun Filtro" and first_goal_time != "Nessun Filtro":
-        fh, fa = map(int, first_goal_result.split('-'))
-        min_first, max_first = goal_pattern_time_intervals[first_goal_time]
-        df_after_first = df_after_first[df_after_first.apply(lambda row: check_first_goal_enhanced(row, fh, fa, min_first, max_first), axis=1)]
-
-    
-# --- PATCH E: robust guard for df_after_first before copying into df_after_second ---
-try:
-    _ns = {}
-    try:
-        _ns.update(globals())
-    except Exception:
-        pass
-    try:
-        _ns.update(locals())
-    except Exception:
-        pass
-    # Ensure df_after_first exists
-    if 'df_after_first' not in _ns or _ns.get('df_after_first') is None:
-        _cands = ['df_gate2','df_gate1','df_gate0','df_gate','df_filtered','df_gate_pre','df_base','df']
-        _base = None
-        for _n in _cands:
-            if _n in _ns and _ns[_n] is not None:
-                _base = _ns[_n]
-                break
-        if _base is None:
-            raise NameError("df_after_first is undefined and no base df available")
-        df_after_first = _base.copy()
-    df_after_second = df_after_first.copy()
-except Exception as _patch_e_exc:
-    # last resort fallback
-    try:
-        df_after_second = df_gate1.copy()
-    except Exception:
-        raise
-# --- END PATCH E ---
-# --- PATCH C: if second goal is filtered and occurs in 1st half, lock HT to that result ---
-try:
-    if ('first_goal_result' in globals() and 'first_goal_time' in globals() and
-        'second_goal_result' in globals() and 'second_goal_time' in globals() and
-        first_goal_result != "Nessun Filtro" and first_goal_time != "Nessun Filtro" and
-        second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro"):
-        # Expect like "0-2"
-        try:
-            sh, sa = [int(x) for x in str(second_goal_result).split('-')]
-            # goal_pattern_time_intervals should exist in code base; fallback to common mapping
-            intervals = goal_pattern_time_intervals if 'goal_pattern_time_intervals' in globals() else {
-                "0-10": (0,10), "11-20": (11,20), "21-30": (21,30), "31-39": (31,39), "40-45": (40,45),
-                "45+": (45,45), "46-60": (46,60), "61-75": (61,75), "76-90": (76,90), "90+": (90,90)
-            }
-            min_second, max_second = intervals.get(str(second_goal_time), (None, None))
-        except Exception:
-            sh = sa = min_second = max_second = None
-        if max_second is not None and max_second <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_after_second.columns):
-            df_after_second = df_after_second[
-                (df_after_second['home_team_goal_count_half_time'].astype(int) == sh) &
-                (df_after_second['away_team_goal_count_half_time'].astype(int) == sa)
-            ]
-except Exception as _patch_exc:
-    pass
-# --- END PATCH C ---
-    if (first_goal_result != "Nessun Filtro" and first_goal_time != "Nessun Filtro" and
-        second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro"):
-        sh, sa = map(int, second_goal_result.split('-'))
-        min_second, max_second = goal_pattern_time_intervals[second_goal_time]
-        
-# --- PATCH D: Guard undefined sh/sa/min_second/max_second for second-goal filter ---
-try:
-    _apply_second = False
-    _intervals = goal_pattern_time_intervals if 'goal_pattern_time_intervals' in globals() else {
-        "0-10": (0,10), "11-20": (11,20), "21-30": (21,30), "31-39": (31,39), "40-45": (40,45),
-        "45+": (45,45), "46-60": (46,60), "61-75": (61,75), "76-90": (76,90), "90+": (90,90)
-    }
-    if ('second_goal_result' in globals() and 'second_goal_time' in globals() and
-        second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro"):
-        try:
-            sh, sa = [int(x) for x in str(second_goal_result).split('-')]
-            min_second, max_second = _intervals.get(str(second_goal_time), (None, None))
-            if min_second is not None and max_second is not None:
-                _apply_second = True
-        except Exception:
-            _apply_second = False
-    if _apply_second:
-        df_after_second = df_after_first[df_after_first.apply(lambda row: check_second_goal_enhanced(row, sh, sa, min_second, max_second), axis=1)]
-    else:
-        # Robust fallback base df
-        try:
-            _candidates = ['df_after_first','df_gate2','df_gate1','df_gate0','df_gate','df_filtered','df_gate_pre','df_base','df']
-            _ns = {}
-            _ns.update(globals())
-            _ns.update(locals())
-            _base_df = None
-            for _n in _candidates:
-                if _n in _ns and _ns[_n] is not None:
-                    _base_df = _ns[_n]
-                    break
-            if _base_df is None:
-                # last-resort: create empty same-columns DataFrame if df_gate1 exists
-                if 'df_gate1' in _ns:
-                    import pandas as _pd
-                    _base_df = _ns['df_gate1'].copy()
-                else:
-                    raise NameError("No suitable base df found for df_after_second fallback")
-            df_after_second = _base_df.copy()
-        except Exception:
-            # As an absolute fallback, try to keep the pipeline alive with df_after_second = df_gate1
+        def _safe_int(x, d):
             try:
-                df_after_second = df_gate1.copy()
+                return int(x)
             except Exception:
-                raise
-except Exception as _patch_d_exc:
-    # On any unexpected error, fall back to no additional second-goal filtering
-    pass
+                return d
 
-# --- PATCH E: robust guard for df_after_first before copying into df_after_second ---
-try:
-    _ns = {}
-    try:
-        _ns.update(globals())
-    except Exception:
-        pass
-    try:
-        _ns.update(locals())
-    except Exception:
-        pass
-    # Ensure df_after_first exists
-    if 'df_after_first' not in _ns or _ns.get('df_after_first') is None:
-        _cands = ['df_gate2','df_gate1','df_gate0','df_gate','df_filtered','df_gate_pre','df_base','df']
-        _base = None
-        for _n in _cands:
-            if _n in _ns and _ns[_n] is not None:
-                _base = _ns[_n]
-                break
-        if _base is None:
-            raise NameError("df_after_first is undefined and no base df available")
-        df_after_first = _base.copy()
-    df_after_second = df_after_first.copy()
-except Exception as _patch_e_exc:
-    # last resort fallback
-    try:
-        df_after_second = df_gate1.copy()
-    except Exception:
-        raise
-# --- END PATCH E ---
-# --- END PATCH D ---
+        _start_min = _safe_int(start_min_patt if 'start_min_patt' in globals() else 46, 46)
 
+        def match_score_at_min(row):
+            h_at_m, a_at_m = cum_score_at_min(row, _start_min)
+            return (h_at_m == curr_h) and (a_at_m == curr_a)
 
-    df_out = df_after_second.copy()
+        df_gate1 = df_pattern[df_pattern.apply(match_score_at_min, axis=1)]
 
-    st.markdown("---")
-    if df_out.empty:
-        st.warning("Nessuna partita trovata con i vincoli e i filtri selezionati.")
-    else:
-        st.write(f"Analisi basata su **{len(df_out)}** partite (dopo vincoli e pattern selezionati).")
-        st.subheader("Partite corrispondenti ai filtri")
-        st.dataframe(df_out)
+        # PATCH A/B: Coerenza HT
+        try:
+            if _start_min >= 46 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
+                df_gate1 = df_gate1[(df_gate1['home_team_goal_count_half_time'].astype(int) == int(curr_h)) & (df_gate1['away_team_goal_count_half_time'].astype(int) == int(curr_a))]
+        except Exception:
+            pass
+        try:
+            if _start_min <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_gate1.columns):
+                df_gate1 = df_gate1[(df_gate1['home_team_goal_count_half_time'].astype(int) == int(curr_h)) & (df_gate1['away_team_goal_count_half_time'].astype(int) == int(curr_a))]
+        except Exception:
+            pass
 
-        # --- SEZIONE HT ---
-        with st.expander("📊 Statistiche HT (clicca per espandere)", expanded=False):
-            mostra_risultati_esatti(df_out, "home_team_goal_count_half_time", "away_team_goal_count_half_time", "HT")
-            st.write("### WinRate HT")
-            df_winrate_ht = calcola_winrate(df_out, "home_team_goal_count_half_time", "away_team_goal_count_half_time")
-            st.dataframe(style_table(df_winrate_ht, ['WinRate %']))
-            st.write("### Over/Under HT")
-            df_over_ht, df_under_ht = calcola_over_under(df_out, 'ht')
-            st.dataframe(style_table(df_over_ht, ['Percentuale %']))
-            st.dataframe(style_table(df_under_ht, ['Percentuale %']))
-            st.write("### Doppia Chance HT")
-            df_dc_ht = calcola_double_chance(df_out, 'ht')
-            st.dataframe(style_table(df_dc_ht, ['Percentuale %']))
-            st.write("### BTTS HT")
-            df_btts_ht = calcola_btts(df_out, 'ht')
-            st.dataframe(style_table(df_btts_ht, ['Percentuale %']))
-            st.write("### To Score HT")
-            df_ts_ht = calcola_to_score(df_out, 'ht')
-            st.dataframe(style_table(df_ts_ht, ['Percentuale %']))
-            st.write("### First to Score HT")
-            df_fts_ht = calcola_first_to_score(df_out, 'ht')
-            st.dataframe(style_table(df_fts_ht, ['Percentuale %']))
+        # Gate 2: se c'è secondo vincolo (minuto + risultato)
+        df_gate2 = df_gate1
+        if 'use_second_constraint' in globals() and use_second_constraint and second_min_patt is not None and risultato_attuale_patt2:
+            try:
+                curr2_h, curr2_a = map(int, str(risultato_attuale_patt2).split('-'))
+                _second_min = _safe_int(second_min_patt, _start_min)
+                def match_score_at_min2(row):
+                    h2, a2 = cum_score_at_min(row, _second_min)
+                    return (h2 == curr2_h) and (a2 == curr2_a)
+                df_gate2 = df_gate2[df_gate2.apply(match_score_at_min2, axis=1)]
+                # Se si attraversa l'intervallo senza cambio punteggio, imponi zero gol fino a HT
+                if _start_min <= 45 and _second_min >= 46 and 'home_team_goal_count_half_time' in df_gate2.columns:
+                    def no_goals_until_ht_and_ht_equals(row):
+                        g_h, g_a = goals_between(row, _start_min, 45)
+                        ht_ok = (int(row['home_team_goal_count_half_time']) == curr_h) and (int(row['away_team_goal_count_half_time']) == curr_a)
+                        return (g_h == 0 and g_a == 0 and ht_ok)
+                    df_gate2 = df_gate2[df_gate2.apply(no_goals_until_ht_and_ht_equals, axis=1)]
+            except Exception:
+                pass
 
-        # --- SEZIONE FT ---
-        with st.expander("📊 Statistiche FT (clicca per espandere)", expanded=False):
-            mostra_risultati_esatti(df_out, "home_team_goal_count", "away_team_goal_count", "FT")
-            st.write("### WinRate FT")
-            df_winrate_ft = calcola_winrate(df_out, "home_team_goal_count", "away_team_goal_count")
-            st.dataframe(style_table(df_winrate_ft, ['WinRate %']))
-            st.write("### Over/Under FT")
-            df_over_ft, df_under_ft = calcola_over_under(df_out, 'ft')
-            st.dataframe(style_table(df_over_ft, ['Percentuale %']))
-            st.dataframe(style_table(df_under_ft, ['Percentuale %']))
-            st.write("### Doppia Chance FT")
-            df_dc_ft = calcola_double_chance(df_out, 'ft')
-            st.dataframe(style_table(df_dc_ft, ['Percentuale %']))
-            st.write("### Multi Gol")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("#### Casa")
-                df_multi_gol_home = calcola_multi_gol(df_out, "home_team_goal_count", "Home")
-                st.dataframe(style_table(df_multi_gol_home, ['Percentuale %']))
-            with col2:
-                st.write("#### Trasferta")
-                df_multi_gol_away = calcola_multi_gol(df_out, "away_team_goal_count", "Away")
-                st.dataframe(style_table(df_multi_gol_away, ['Percentuale %']))
-            st.write("### BTTS FT")
-            df_btts_ft = calcola_btts(df_out, 'ft')
-            st.dataframe(style_table(df_btts_ft, ['Percentuale %']))
-            st.write("### To Score FT")
-            df_ts_ft = calcola_to_score(df_out, 'ft')
-            st.dataframe(style_table(df_ts_ft, ['Percentuale %']))
-            st.write("### First to Score FT")
-            df_fts_ft = calcola_first_to_score(df_out, 'ft')
-            st.dataframe(style_table(df_fts_ft, ['Percentuale %']))
+        # Sezione filtri 1°/2° gol
+        df_after_first = df_gate2.copy()
+        try:
+            if 'first_goal_result' in globals() and 'first_goal_time' in globals() and first_goal_result != "Nessun Filtro" and first_goal_time != "Nessun Filtro":
+                fh, fa = map(int, str(first_goal_result).split('-'))
+                min_first, max_first = goal_pattern_time_intervals.get(str(first_goal_time), (None, None)) if 'goal_pattern_time_intervals' in globals() else (None, None)
+                if min_first is not None and max_first is not None:
+                    df_after_first = df_after_first[df_after_first.apply(lambda row: check_first_goal_enhanced(row, fh, fa, min_first, max_first), axis=1)]
+        except Exception:
+            pass
 
-        # --- Next Goal e Timeband ---
+        # Secondo gol (robusto)
+        try:
+            _apply_second = False
+            if 'second_goal_result' in globals() and 'second_goal_time' in globals() and second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro":
+                sh, sa = map(int, str(second_goal_result).split('-'))
+                intervals = goal_pattern_time_intervals if 'goal_pattern_time_intervals' in globals() else {"0-10": (0,10), "11-20": (11,20), "21-30": (21,30), "31-39": (31,39), "40-45": (40,45), "45+": (45,45), "46-60": (46,60), "61-75": (61,75), "76-90": (76,90), "90+": (90,90)}
+                min_second, max_second = intervals.get(str(second_goal_time), (None, None))
+                if min_second is not None and max_second is not None:
+                    _apply_second = True
+            if _apply_second:
+                df_after_second = df_after_first[df_after_first.apply(lambda row: check_second_goal_enhanced(row, sh, sa, min_second, max_second), axis=1)]
+            else:
+                df_after_second = df_after_first.copy()
+        except Exception:
+            df_after_second = df_after_first.copy()
+
+        # Sigillo HT se 2° gol nel 1° tempo
+        try:
+            if _apply_second and max_second is not None and max_second <= 45 and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_after_second.columns):
+                df_after_second = df_after_second[
+                    (df_after_second['home_team_goal_count_half_time'].astype(int) == sh) &
+                    (df_after_second['away_team_goal_count_half_time'].astype(int) == sa)
+                ]
+        except Exception:
+            pass
+
+        df_out = df_after_second.copy()
+
         st.markdown("---")
-        st.subheader("Statistiche Dinamiche (da minuto iniziale)")
-        st.write("### Next Goal")
-        df_ng = calcola_next_goal(df_out, start_min_patt, 90)
-        st.dataframe(style_table(df_ng, ['Percentuale %']))
-        st.write("### Distribuzione Gol per Timeframe")
-        mostra_distribuzione_timeband(df_out, min_start_display=start_min_patt)
+        if df_out.empty:
+            st.warning("Nessuna partita trovata con i vincoli e i filtri selezionati.")
+        else:
+            st.success(f"Partite trovate: {len(df_out)}")
+            st.dataframe(df_out[['date_GMT','home_team_name','away_team_name','home_team_goal_timings','away_team_goal_timings','total_goals_at_half_time']].head(50) if set(['date_GMT','home_team_name','away_team_name','home_team_goal_timings','away_team_goal_timings','total_goals_at_half_time']).issubset(df_out.columns) else df_out.head(50))
+    except Exception as e:
+        st.error(f"Errore durante l'analisi pattern: {e}")
+        import traceback as _tb
+        st.code(_tb.format_exc())
