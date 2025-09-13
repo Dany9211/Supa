@@ -853,7 +853,32 @@ except Exception as _patch_exc:
         second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro"):
         sh, sa = map(int, second_goal_result.split('-'))
         min_second, max_second = goal_pattern_time_intervals[second_goal_time]
+        
+# --- PATCH D: Guard undefined sh/sa/min_second/max_second for second-goal filter ---
+try:
+    _apply_second = False
+    _intervals = goal_pattern_time_intervals if 'goal_pattern_time_intervals' in globals() else {
+        "0-10": (0,10), "11-20": (11,20), "21-30": (21,30), "31-39": (31,39), "40-45": (40,45),
+        "45+": (45,45), "46-60": (46,60), "61-75": (61,75), "76-90": (76,90), "90+": (90,90)
+    }
+    if ('second_goal_result' in globals() and 'second_goal_time' in globals() and
+        second_goal_result != "Nessun Filtro" and second_goal_time != "Nessun Filtro"):
+        try:
+            sh, sa = [int(x) for x in str(second_goal_result).split('-')]
+            min_second, max_second = _intervals.get(str(second_goal_time), (None, None))
+            if min_second is not None and max_second is not None:
+                _apply_second = True
+        except Exception:
+            _apply_second = False
+    if _apply_second:
         df_after_second = df_after_first[df_after_first.apply(lambda row: check_second_goal_enhanced(row, sh, sa, min_second, max_second), axis=1)]
+    else:
+        df_after_second = df_after_first.copy()
+except Exception as _patch_d_exc:
+    # On any unexpected error, fall back to no additional second-goal filtering
+    df_after_second = df_after_first.copy()
+# --- END PATCH D ---
+
 
     df_out = df_after_second.copy()
 
