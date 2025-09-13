@@ -443,6 +443,15 @@ def _safe_int(x, default=0):
         return default
 
 # Derivazioni sicure per FT e HT
+        # --- GUARD: ensure df_out exists ---
+        if 'df_out' not in locals() and 'df_out' not in globals():
+            try:
+                df_out = df_after_second.copy() if 'df_after_second' in locals() or 'df_after_second' in globals() else pd.DataFrame()
+            except Exception:
+                df_out = pd.DataFrame()
+        # If still undefined or None, make it a DataFrame
+        if df_out is None:
+            df_out = pd.DataFrame()
 tot_rows = len(df_out)
 
 # FT goal counts
@@ -565,27 +574,38 @@ res_1x2_sh = [
 
 import pandas as _pd
 st.markdown("### 📊 Statistiche dal sottoinsieme corrente")
-with st.expander("FT — Over winrate & 1X2", expanded=False):
-    st.write(_pd.DataFrame(over_ft).T)
-    st.write(_pd.DataFrame(res_1x2_ft))
+# Toggles per mostrare/nascondere le sezioni
+col_t1, col_t2, col_t3 = st.columns(3)
+with col_t1:
+    _show_ft = st.checkbox("Mostra FT", value=True, key="show_ft_stats")
+with col_t2:
+    _show_ht = st.checkbox("Mostra HT", value=True, key="show_ht_stats")
+with col_t3:
+    _show_sh = st.checkbox("Mostra 2°T (SH)", value=False, key="show_sh_stats")
 
-    st.markdown("**Top 10 risultati esatti FT**")
-    st.write(_pd.DataFrame(_top_scores(exact_ft, 10)))
+with st.container():
+    if _show_ft:
+        with st.expander("FT — Over winrate & 1X2", expanded=False):
+            st.write(_pd.DataFrame(over_ft).T)
+            st.write(_pd.DataFrame(res_1x2_ft))
+            st.markdown("**Top 10 risultati esatti FT**")
+            st.write(_pd.DataFrame(_top_scores(exact_ft, 10)))
 
-with st.expander("HT — Over winrate & 1X2", expanded=False):
-    st.write(_pd.DataFrame(over_ht).T)
-    st.write(_pd.DataFrame(res_1x2_ht))
+    if _show_ht:
+        with st.expander("HT — Over winrate & 1X2", expanded=False):
+            st.write(_pd.DataFrame(over_ht).T)
+            st.write(_pd.DataFrame(res_1x2_ht))
+            st.markdown("**Top 10 risultati esatti HT**")
+            st.write(_pd.DataFrame(_top_scores(exact_ht, 10)))
 
-    st.markdown("**Top 10 risultati esatti HT**")
-    st.write(_pd.DataFrame(_top_scores(exact_ht, 10)))
-
-with st.expander("2° Tempo — Over winrate & 1X2", expanded=False):
-    st.write(_pd.DataFrame(over_sh).T)
-    st.write(_pd.DataFrame(res_1x2_sh))
-
-    st.markdown("**Top 10 risultati esatti 2° Tempo**")
-    st.write(_pd.DataFrame(_top_scores(exact_sh, 10)))
+    if _show_sh:
+        with st.expander("2° Tempo — Over winrate & 1X2", expanded=False):
+            st.write(_pd.DataFrame(over_sh).T)
+            st.write(_pd.DataFrame(res_1x2_sh))
+            st.markdown("**Top 10 risultati esatti 2° Tempo**")
+            st.write(_pd.DataFrame(_top_scores(exact_sh, 10)))
 # =================== FINE STATISTICHE ===================
+
 
 st.dataframe(style_table(df_result, ['Percentuale %', '>= 2 Gol %']))
 
