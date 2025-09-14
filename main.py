@@ -1,14 +1,15 @@
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import re
 
-st.set_page_config(page_title="Analisi Pattern Gol - Clean", layout="wide")
-st.title("Analisi Pattern Gol (versione pulita)")
+st.set_page_config(page_title="Analisi Pattern Gol", layout="wide")
+st.title("Analisi Pattern Gol")
 
-# -----------------------------
+# =====================================================================================
 # Helpers
-# -----------------------------
+# =====================================================================================
 
 TIMEBANDS = {
     "0-10": (0, 10),
@@ -123,11 +124,11 @@ def df_cols_ok(df: pd.DataFrame):
     base = [GOAL_COLS["h_tim"], GOAL_COLS["a_tim"]]
     return all(c in df.columns for c in base)
 
-# -----------------------------
+# =====================================================================================
 # Sidebar: upload e filtri base
-# -----------------------------
+# =====================================================================================
 st.sidebar.header("Dati")
-uploaded = st.sidebar.file_uploader("Carica CSV (Footystats/UNITI)", type=["csv"])
+uploaded = st.sidebar.file_uploader("Carica CSV", type=["csv"])
 sep = st.sidebar.radio("Separatore", options=[",",";"], index=1, horizontal=True)
 
 if uploaded is not None:
@@ -137,20 +138,20 @@ else:
     df = pd.DataFrame(columns=META_COLS + list(GOAL_COLS.values()))
 
 if not df.empty:
-    # filtri rapidi
     leagues = sorted(df["league"].dropna().unique()) if "league" in df.columns else []
-    sel_leagues = st.sidebar.multiselect("League", leagues, default=leagues[:1] if leagues else [])
+    default_leagues = leagues[:1] if leagues else []
+    sel_leagues = st.sidebar.multiselect("League", leagues, default=default_leagues)
     if sel_leagues and "league" in df.columns:
         df = df[df["league"].isin(sel_leagues)].copy()
 
-st.write(f"**Righe correnti (post filtri sidebar):** {len(df)}")
+st.caption(f"Righe correnti (post filtri sidebar): {len(df)}")
 
 if not df_cols_ok(df):
     st.warning("Colonne dei timing gol non trovate. Servono 'home_team_goal_timings' e 'away_team_goal_timings'.")
-    
-# -----------------------------
+
+# =====================================================================================
 # Pattern input
-# -----------------------------
+# =====================================================================================
 st.markdown("---")
 st.subheader("Vincoli dell'analisi (Pattern)")
 
@@ -183,9 +184,9 @@ with colG:
 
 st.markdown("---")
 
-# -----------------------------
+# =====================================================================================
 # Avvio analisi (button)
-# -----------------------------
+# =====================================================================================
 if st.button("Avvia Analisi Pattern Gol"):
     if df.empty or not df_cols_ok(df):
         st.error("Dataset vuoto o colonne timing mancanti.")
@@ -282,9 +283,9 @@ if st.button("Avvia Analisi Pattern Gol"):
     else:
         st.dataframe(df_out.head(200), use_container_width=True)
 
-# -----------------------------
+# =====================================================================================
 # Statistiche (usano session_state["df_out"])
-# -----------------------------
+# =====================================================================================
 st.markdown("---")
 st.subheader("📊 Statistiche dal sottoinsieme corrente")
 
@@ -293,8 +294,6 @@ df_out = st.session_state.get("df_out", pd.DataFrame())
 if df_out is None or df_out.empty:
     st.info("Nessun dato ancora disponibile: premi **Avvia Analisi Pattern Gol** per popolare le statistiche.")
 else:
-    import numpy as np
-
     def _pct(n, d):
         return (100.0 * n / d) if d else 0.0
 
@@ -403,3 +402,100 @@ else:
             top_sh = [{"Score": f"{h}-{a}", "N": n, "Win%": round(_pct(n, tot_rows),2)} for (h,a), n in exact_sh.most_common(10)]
             st.markdown("**Top 10 risultati esatti 2° Tempo**")
             st.write(pd.DataFrame(top_sh))
+
+# =====================================================================================
+# TIMEBAND (inclusivi; 45+ e 90+ separati SOLO nella vista)
+# =====================================================================================
+st.markdown("---")
+st.subheader("📈 Timeband gol (limiti inclusivi; 45+ e 90+ separati in vista)")
+
+df_out = st.session_state.get("df_out", pd.DataFrame())
+if not df_out.empty and {"home_team_goal_timings","away_team_goal_timings"}.issubset(df_out.columns):
+    _BANDS = ["0-10","11-20","21-30","31-39","40-45","45+","46-60","61-75","76-90","90+"]
+
+    def _band_for_min(m:int) -> str:
+        if   0 <= m <= 10:  return "0-10"
+        elif 11 <= m <= 20: return "11-20"
+        elif 21 <= m <= 30: return "21-30"
+        elif 31 <= m <= 39: return "31-39"
+        elif 40 <= m <= 45: return "40-45"
+        elif 46 <= m <= 60: return "46-60"
+        elif 61 <= m <= 75: return "61-75"
+        elif 76 <= m <= 90: return "76-90"
+        else:               return None
+
+    def _split_tokens(s:str):
+        if pd.isna(s) or str(s).strip()=="":
+            return []
+        toks = []
+        for t in str(s).split(","):
+            t = t.strip()
+            if t:
+                toks.append(t)
+        return toks
+
+    def _count_row_timebands(home_raw:str, away_raw:str):
+        counts_home = {b:0 for b in _BANDS}
+        counts_away = {b:0 for b in _BANDS}
+
+        def _accumulate(tokens, is_home:bool):
+            for tok in tokens:
+                base = tok
+                plus = False
+                if "+" in tok:
+                    base, _ = tok.split("+", 1)
+                    plus = True
+                elif "'" in tok:
+                    base, _ = tok.split("'", 1)
+                    plus = True
+                try:
+                    m = int(base)
+                except:
+                    continue
+
+                if plus and m == 45:
+                    band = "45+"
+                elif plus and m == 90:
+                    band = "90+"
+                else:
+                    band = _band_for_min(m)
+
+                if band is None:
+                    continue
+                if is_home:
+                    counts_home[band] += 1
+                else:
+                    counts_away[band] += 1
+
+        _accumulate(_split_tokens(home_raw), True)
+        _accumulate(_split_tokens(away_raw), False)
+        return counts_home, counts_away
+
+    tot_home = {b:0 for b in _BANDS}
+    tot_away = {b:0 for b in _BANDS}
+
+    for _, r in df_out[["home_team_goal_timings","away_team_goal_timings"]].iterrows():
+        ch, ca = _count_row_timebands(r["home_team_goal_timings"], r["away_team_goal_timings"])
+        for b in _BANDS:
+            tot_home[b] += ch[b]
+            tot_away[b] += ca[b]
+
+    df_timeband_home = pd.DataFrame({
+        "Timeband": _BANDS,
+        "GF (Home)": [tot_home[b] for b in _BANDS],
+        "GS (Home)": [tot_away[b] for b in _BANDS],
+    })
+
+    df_timeband_away = pd.DataFrame({
+        "Timeband": _BANDS,
+        "GF (Away)": [tot_away[b] for b in _BANDS],
+        "GS (Away)": [tot_home[b] for b in _BANDS],
+    })
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.dataframe(df_timeband_home, use_container_width=True)
+    with c2:
+        st.dataframe(df_timeband_away, use_container_width=True)
+else:
+    st.caption("Carica e filtra i dati, poi avvia l'analisi per vedere le timeband.")
