@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -844,7 +845,81 @@ if st.button("Avvia Analisi Pattern Gol"):
             st.warning("Nessuna partita trovata con i vincoli e i filtri selezionati.")
         else:
             st.success(f"Partite trovate: {len(df_out)}")
-            st.dataframe(df_out[['date_GMT','home_team_name','away_team_name','home_team_goal_timings','away_team_goal_timings','total_goals_at_half_time']].head(50) if set(['date_GMT','home_team_name','away_team_name','home_team_goal_timings','away_team_goal_timings','total_goals_at_half_time']).issubset(df_out.columns) else df_out.head(50))
+            if set(['date_GMT','home_team_name','away_team_name','home_team_goal_timings','away_team_goal_timings','total_goals_at_half_time']).issubset(df_out.columns):
+                st.dataframe(df_out[['date_GMT','home_team_name','away_team_name','home_team_goal_timings','away_team_goal_timings','total_goals_at_half_time']].head(50))
+            else:
+                st.dataframe(df_out.head(50))
+
+            # ==================== STATISTICHE SU df_out ====================
+            # Assicurati che le colonne totali esistano
+            df_stats = df_out.copy()
+            if 'total_goals_at_full_time' not in df_stats.columns and {'home_team_goal_count','away_team_goal_count'}.issubset(df_stats.columns):
+                df_stats['total_goals_at_full_time'] = df_stats['home_team_goal_count'] + df_stats['away_team_goal_count']
+            if 'total_goals_at_half_time' not in df_stats.columns and {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_stats.columns):
+                df_stats['total_goals_at_half_time'] = df_stats['home_team_goal_count_half_time'] + df_stats['away_team_goal_count_half_time']
+
+            st.markdown("#### 📊 Winrate 1X2")
+            cols_wr = st.columns(3)
+            with cols_wr[0]:
+                wr_ht = calcola_winrate(df_stats, 'home_team_goal_count_half_time', 'away_team_goal_count_half_time') if {'home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_stats.columns) else pd.DataFrame()
+                st.caption("HT")
+                st.dataframe(style_table(wr_ht, ['WinRate %']))
+            with cols_wr[1]:
+                # Secondo tempo: differenza FT-HT
+                if {'home_team_goal_count','away_team_goal_count','home_team_goal_count_half_time','away_team_goal_count_half_time'}.issubset(df_stats.columns):
+                    df_tmp = df_stats.copy()
+                    df_tmp['sh_home_goals'] = df_tmp['home_team_goal_count'] - df_tmp['home_team_goal_count_half_time']
+                    df_tmp['sh_away_goals'] = df_tmp['away_team_goal_count'] - df_tmp['away_team_goal_count_half_time']
+                    wr_sh = calcola_winrate(df_tmp, 'sh_home_goals', 'sh_away_goals')
+                else:
+                    wr_sh = pd.DataFrame()
+                st.caption("2° Tempo")
+                st.dataframe(style_table(wr_sh, ['WinRate %']))
+            with cols_wr[2]:
+                wr_ft = calcola_winrate(df_stats, 'home_team_goal_count', 'away_team_goal_count') if {'home_team_goal_count','away_team_goal_count'}.issubset(df_stats.columns) else pd.DataFrame()
+                st.caption("FT")
+                st.dataframe(style_table(wr_ft, ['WinRate %']))
+
+            st.markdown("#### 📈 Over / Under")
+            cols_ou = st.columns(3)
+            with cols_ou[0]:
+                ou_ht = calcola_over_under(df_stats, 'ht')[0] if 'total_goals_at_half_time' in df_stats.columns else pd.DataFrame()
+                st.caption("HT — Over")
+                st.dataframe(style_table(ou_ht, ['Percentuale %']))
+            with cols_ou[1]:
+                # SH usa differenza
+                if {'total_goals_at_full_time','total_goals_at_half_time'}.issubset(df_stats.columns):
+                    ou_sh = calcola_over_under(df_stats, 'sh')[0]
+                else:
+                    ou_sh = pd.DataFrame()
+                st.caption("2° Tempo — Over")
+                st.dataframe(style_table(ou_sh, ['Percentuale %']))
+            with cols_ou[2]:
+                ou_ft = calcola_over_under(df_stats, 'ft')[0] if 'total_goals_at_full_time' in df_stats.columns else pd.DataFrame()
+                st.caption("FT — Over")
+                st.dataframe(style_table(ou_ft, ['Percentuale %']))
+
+            # Under (se vuoi vederli esplicitamente)
+            cols_u = st.columns(3)
+            with cols_u[0]:
+                uu_ht = calcola_over_under(df_stats, 'ht')[1] if 'total_goals_at_half_time' in df_stats.columns else pd.DataFrame()
+                st.caption("HT — Under")
+                st.dataframe(style_table(uu_ht, ['Percentuale %']))
+            with cols_u[1]:
+                if {'total_goals_at_full_time','total_goals_at_half_time'}.issubset(df_stats.columns):
+                    uu_sh = calcola_over_under(df_stats, 'sh')[1]
+                else:
+                    uu_sh = pd.DataFrame()
+                st.caption("2° Tempo — Under")
+                st.dataframe(style_table(uu_sh, ['Percentuale %']))
+            with cols_u[2]:
+                uu_ft = calcola_over_under(df_stats, 'ft')[1] if 'total_goals_at_full_time' in df_stats.columns else pd.DataFrame()
+                st.caption("FT — Under")
+                st.dataframe(style_table(uu_ft, ['Percentuale %']))
+
+            st.markdown("#### 🕒 Timeband (intervalli inclusivi; 45+ e 90+ separati nella vista)")
+            mostra_distribuzione_timeband(df_out, min_start_display=_start_min)
+            # ==================== FINE STATISTICHE ====================
     except Exception as e:
         st.error(f"Errore durante l'analisi pattern: {e}")
         import traceback as _tb
